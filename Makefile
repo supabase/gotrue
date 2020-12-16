@@ -33,3 +33,12 @@ test: ## Run tests.
 
 vet: # Vet the code
 	go vet $(CHECK_FILES)
+
+check-swagger:
+	which swagger || (GO11MODULE=off go get -u github.com/go-swagger/go-swagger/cmd/swagger)
+
+swagger: check-swagger
+	GO11MODULE=on go mod vendor  && GO11MODULE=off swagger generate spec -o ./swagger.json --scan-models
+
+serve-swagger: check-swagger
+	swagger serve -F=swagger swagger.yaml

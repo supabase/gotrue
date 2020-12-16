@@ -116,6 +116,7 @@ type Configuration struct {
 		Key      string `json:"key"`
 		Duration int    `json:"duration"`
 	} `json:"cookies"`
+	SwaggerFilePath string `json:"swagger"`
 }
 
 func loadEnvironment(filename string) error {
@@ -221,6 +222,10 @@ func (config *Configuration) ApplyDefaults() {
 
 	if config.Cookie.Duration == 0 {
 		config.Cookie.Duration = 86400
+	}
+
+	if config.SwaggerFilePath == "" {
+		config.SwaggerFilePath = "/tmp/swagger.json"
 	}
 }
 

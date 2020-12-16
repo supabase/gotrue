@@ -12,6 +12,7 @@ import (
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
 	"github.com/go-chi/chi"
+	swaggerMdw "github.com/go-openapi/runtime/middleware"
 	"github.com/gobuffalo/uuid"
 	"github.com/imdario/mergo"
 	"github.com/netlify/gotrue/conf"
@@ -87,6 +88,17 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	r.UseBypass(xffmw.Handler)
 	r.Use(addRequestID(globalConfig))
 	r.Use(recoverer)
+
+	r.UseBypass(func(next http.Handler) http.Handler {
+		opts := swaggerMdw.SwaggerUIOpts{}
+		return swaggerMdw.SwaggerUI(opts, next)
+	})
+
+	r.Get("/swagger.json", func(w http.ResponseWriter, r *http.Request) error {
+		cfg := getConfig(r.Context())
+		http.ServeFile(w, r, cfg.SwaggerFilePath)
+		return nil
+	})
 
 	r.Get("/health", api.HealthCheck)
 
