@@ -87,6 +87,10 @@ func tooManyRequestsError(fmtString string, args ...interface{}) *HTTPError {
 	return httpError(http.StatusTooManyRequests, fmtString, args...)
 }
 
+func blockedUserError(fmtString string, args ...interface{}) *HTTPError {
+	return httpError(http.StatusForbidden, fmtString, args...)
+}
+
 // HTTPError is an error with a message and an HTTP status code.
 type HTTPError struct {
 	Code            int    `json:"code"`

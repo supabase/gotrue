@@ -28,6 +28,7 @@ type User struct {
 	EncryptedPassword string     `json:"-" db:"encrypted_password"`
 	ConfirmedAt       *time.Time `json:"confirmed_at,omitempty" db:"confirmed_at"`
 	InvitedAt         *time.Time `json:"invited_at,omitempty" db:"invited_at"`
+	IsDisabled        bool       `json:"is_disabled,omitempty" db:"is_disabled"`
 
 	ConfirmationToken  string     `json:"-" db:"confirmation_token"`
 	ConfirmationSentAt *time.Time `json:"confirmation_sent_at,omitempty" db:"confirmation_sent_at"`
@@ -135,6 +136,12 @@ func (u *User) IsConfirmed() bool {
 	return u.ConfirmedAt != nil
 }
 
+// IsBlocked checks if a user has already being
+// blocked by admin.
+func (u *User) IsBlocked() bool {
+	return u.IsDisabled
+}
+
 // SetRole sets the users Role to roleName
 func (u *User) SetRole(tx *storage.Connection, roleName string) error {
 	u.Role = strings.TrimSpace(roleName)
@@ -234,6 +241,18 @@ func (u *User) ConfirmEmailChange(tx *storage.Connection) error {
 func (u *User) Recover(tx *storage.Connection) error {
 	u.RecoveryToken = ""
 	return tx.UpdateOnly(u, "recovery_token")
+}
+
+// Disable user to get token
+func (u *User) Disable(tx *storage.Connection) error {
+	u.IsDisabled = true
+	return tx.UpdateOnly(u, "is_disabled")
+}
+
+// Enable user to get token
+func (u *User) Enable(tx *storage.Connection) error {
+	u.IsDisabled = false
+	return tx.UpdateOnly(u, "is_disabled")
 }
 
 // CountOtherUsers counts how many other users exist besides the one provided

@@ -113,6 +113,7 @@ CREATE TABLE `users` (
   `is_super_admin` tinyint(1) DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,
+  `is_disabled` tinyint(1) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `users_instance_id_idx` (`instance_id`),
   KEY `users_instance_id_email_idx` (`instance_id`,`email`)

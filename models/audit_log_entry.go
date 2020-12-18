@@ -22,6 +22,8 @@ const (
 	UserInvitedAction           AuditAction = "user_invited"
 	UserDeletedAction           AuditAction = "user_deleted"
 	UserModifiedAction          AuditAction = "user_modified"
+	UserEnabledAction           AuditAction = "user_enabled"
+	UserDisabledAction          AuditAction = "user_disabled"
 	UserRecoveryRequestedAction AuditAction = "user_recovery_requested"
 	TokenRevokedAction          AuditAction = "token_revoked"
 	TokenRefreshedAction        AuditAction = "token_refreshed"

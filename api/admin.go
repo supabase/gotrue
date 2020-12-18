@@ -6,9 +6,9 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi"
+	"github.com/gobuffalo/uuid"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
-	"github.com/gobuffalo/uuid"
 )
 
 type adminUserParams struct {
@@ -247,4 +247,62 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return sendJSON(w, http.StatusOK, map[string]interface{}{})
+}
+
+// adminSetUserStatus can enable/disable user
+func (a *API) adminSetUserStatus(isEnabled bool) func(w http.ResponseWriter, r *http.Request) error {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		ctx := r.Context()
+
+		err := a.db.Transaction(func(tx *storage.Connection) error {
+			if terr := a.changeUserActivity(ctx, tx, !isEnabled); terr != nil {
+				return internalServerError("Error changing user disabled parameter").WithInternalError(terr)
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+
+		return sendJSON(w, http.StatusOK, map[string]interface{}{})
+	}
+}
+
+func (a *API) changeUserActivity(ctx context.Context, conn *storage.Connection, isDisabled bool) error {
+	user := getUser(ctx)
+	instanceID := getInstanceID(ctx)
+	adminUser := getAdminUser(ctx)
+
+	err := a.db.Transaction(func(tx *storage.Connection) error {
+		var terr error
+		var auditAction models.AuditAction
+
+		if isDisabled {
+			terr = user.Disable(tx)
+		} else {
+			terr = user.Enable(tx)
+		}
+
+		if terr != nil {
+			return internalServerError("Database error enable/disable user").WithInternalError(terr)
+		}
+
+		if isDisabled {
+			auditAction = models.UserDisabledAction
+		} else {
+			auditAction = models.UserEnabledAction
+		}
+
+		if terr := models.NewAuditLogEntry(tx, instanceID, adminUser, auditAction, map[string]interface{}{
+			"user_id": user.ID,
+		}); terr != nil {
+			return internalServerError("Error recording audit log entry").WithInternalError(terr)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

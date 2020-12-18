@@ -91,6 +91,10 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		return oauthError("invalid_grant", "Invalid Password")
 	}
 
+	if user.IsBlocked() {
+		return blockedUserError("This user has been disabled by the admin")
+	}
+
 	var token *AccessTokenResponse
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
@@ -150,6 +154,10 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 	if token.Revoked {
 		a.clearCookieToken(ctx, w)
 		return oauthError("invalid_grant", "Invalid Refresh Token").WithInternalMessage("Possible abuse attempt: %v", r)
+	}
+
+	if user.IsBlocked() {
+		return blockedUserError("This user has been disabled by the admin")
 	}
 
 	var tokenString string
