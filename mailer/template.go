@@ -50,7 +50,7 @@ func (m TemplateMailer) ValidateEmail(email string) error {
 }
 
 // InviteMail sends a invite mail to a new user
-func (m *TemplateMailer) InviteMail(user *models.User, referrerURL string) error {
+func (m *TemplateMailer) InviteMail(user *models.User, referrerURL string, notSendMail bool) (inviteUrl string, err error) {
 	globalConfig, err := conf.LoadGlobal(configFile)
 
 	redirectParam := ""
@@ -60,7 +60,7 @@ func (m *TemplateMailer) InviteMail(user *models.User, referrerURL string) error
 
 	url, err := getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.Invite, "token="+user.ConfirmationToken+"&type=invite"+redirectParam)
 	if err != nil {
-		return err
+		return "", err
 	}
 	data := map[string]interface{}{
 		"SiteURL":         m.Config.SiteURL,
@@ -70,7 +70,11 @@ func (m *TemplateMailer) InviteMail(user *models.User, referrerURL string) error
 		"Data":            user.UserMetaData,
 	}
 
-	return m.Mailer.Mail(
+	if notSendMail {
+		return url, nil
+	}
+
+	return url, m.Mailer.Mail(
 		user.Email,
 		string(withDefault(m.Config.Mailer.Subjects.Invite, "You have been invited")),
 		m.Config.Mailer.Templates.Invite,

@@ -9,8 +9,8 @@ func (m noopMailer) ValidateEmail(email string) error {
 	return nil
 }
 
-func (m *noopMailer) InviteMail(user *models.User, referrerURL string) error {
-	return nil
+func (m *noopMailer) InviteMail(user *models.User, referrerURL string, notSendMail bool) (string, error) {
+	return "", nil
 }
 
 func (m *noopMailer) ConfirmationMail(user *models.User, referrerURL string) error {

@@ -182,17 +182,19 @@ func sendConfirmation(tx *storage.Connection, u *models.User, mailer mailer.Mail
 	return errors.Wrap(tx.UpdateOnly(u, "confirmation_token", "confirmation_sent_at"), "Database error updating user for confirmation")
 }
 
-func sendInvite(tx *storage.Connection, u *models.User, mailer mailer.Mailer, referrerURL string) error {
+func sendInvite(tx *storage.Connection, u *models.User, mailer mailer.Mailer, referrerURL string, notSendMail bool) (inviteURL string, err error) {
 	oldToken := u.ConfirmationToken
 	u.ConfirmationToken = crypto.SecureToken()
 	now := time.Now()
-	if err := mailer.InviteMail(u, referrerURL); err != nil {
+
+	inviteURL, err = mailer.InviteMail(u, referrerURL, notSendMail)
+	if err != nil {
 		u.ConfirmationToken = oldToken
-		return errors.Wrap(err, "Error sending invite email")
+		return "", errors.Wrap(err, "Error sending invite email")
 	}
 	u.InvitedAt = &now
 	u.ConfirmationSentAt = &now
-	return errors.Wrap(tx.UpdateOnly(u, "confirmation_token", "confirmation_sent_at", "invited_at"), "Database error updating user for invite")
+	return inviteURL, errors.Wrap(tx.UpdateOnly(u, "confirmation_token", "confirmation_sent_at", "invited_at"), "Database error updating user for invite")
 }
 
 func (a *API) sendPasswordRecovery(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, referrerURL string) error {

@@ -10,8 +10,14 @@ import (
 
 // InviteParams are the parameters the Signup endpoint accepts
 type InviteParams struct {
-	Email string                 `json:"email"`
-	Data  map[string]interface{} `json:"data"`
+	Email  string                 `json:"email"`
+	Unsent bool                   `json:"unsent"`
+	Data   map[string]interface{} `json:"data"`
+}
+
+type InviteAnswer struct {
+	InviteUrl string `json:"invite_url"`
+	*models.User
 }
 
 // Invite is the endpoint for inviting a new user
@@ -36,6 +42,8 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 	if err != nil && !models.IsNotFoundError(err) {
 		return internalServerError("Database error finding user").WithInternalError(err)
 	}
+
+	var inviteUrl string = ""
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		if user != nil {
@@ -64,7 +72,8 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 
 		mailer := a.Mailer(ctx)
 		referrer := a.getReferrer(r)
-		if err := sendInvite(tx, user, mailer, referrer); err != nil {
+		inviteUrl, err = sendInvite(tx, user, mailer, referrer, params.Unsent)
+		if err != nil {
 			return internalServerError("Error inviting user").WithInternalError(err)
 		}
 		return nil
@@ -73,5 +82,10 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	return sendJSON(w, http.StatusOK, user)
+	answer := InviteAnswer{
+		InviteUrl: inviteUrl,
+		User:      user,
+	}
+
+	return sendJSON(w, http.StatusOK, answer)
 }
