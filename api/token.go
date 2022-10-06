@@ -271,32 +271,19 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		return oauthError("invalid_grant", "Invalid Refresh Token")
 	}
 
-	var newToken *models.RefreshToken
-	if token.Revoked {
-		a.clearCookieTokens(config, w)
-		err = db.Transaction(func(tx *storage.Connection) error {
-			validToken, terr := models.GetValidChildToken(tx, token)
-			if terr != nil {
-				if errors.Is(terr, models.RefreshTokenNotFoundError{}) {
-					// revoked token has no descendants
-					return nil
-				}
-				return terr
-			}
-			// check if token is the last previous revoked token
-			if validToken.Parent == storage.NullString(token.Token) {
-				refreshTokenReuseWindow := token.UpdatedAt.Add(time.Second * time.Duration(config.Security.RefreshTokenReuseInterval))
-				if time.Now().Before(refreshTokenReuseWindow) {
-					newToken = validToken
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			return internalServerError("Error validating reuse interval").WithInternalError(err)
-		}
+	refreshTokenReuseWindow := token.UpdatedAt.Add(time.Second * time.Duration(config.Security.RefreshTokenReuseInterval))
 
-		if newToken == nil {
+	if token.Revoked {
+		if time.Now().Before(refreshTokenReuseWindow) {
+			// token can still be used, and the browser/client probably did
+			// not sync refresh tokens concurrently this often happens with
+			// multiple tabs without tab synchronization
+		} else {
+			// for some reason the browser/client did not sync refresh
+			// tokens in the window, the token can't be reused
+
+			a.clearCookieTokens(config, w)
+
 			if config.Security.RefreshTokenRotationEnabled {
 				// Revoke all tokens in token family
 				err = db.Transaction(func(tx *storage.Connection) error {
@@ -310,11 +297,11 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 					return internalServerError(err.Error())
 				}
 			}
+
 			return oauthError("invalid_grant", "Invalid Refresh Token").WithInternalMessage("Possible abuse attempt: %v", r)
 		}
 	}
 
-	var tokenString string
 	var newTokenResponse *AccessTokenResponse
 
 	err = db.Transaction(func(tx *storage.Connection) error {
@@ -323,23 +310,21 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			return terr
 		}
 
-		if newToken == nil {
-			newToken, terr = models.GrantRefreshTokenSwap(r, tx, user, token)
-			if terr != nil {
-				return internalServerError(terr.Error())
-			}
+		newRefreshToken, terr := models.GrantRefreshTokenSwap(r, tx, user, token)
+		if terr != nil {
+			return internalServerError(terr.Error())
 		}
 
-		tokenString, terr = generateAccessToken(user, newToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+		accessToken, terr := generateAccessToken(user, newRefreshToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
 
 		newTokenResponse = &AccessTokenResponse{
-			Token:        tokenString,
+			Token:        accessToken,
 			TokenType:    "bearer",
 			ExpiresIn:    config.JWT.Exp,
-			RefreshToken: newToken.Token,
+			RefreshToken: newRefreshToken.Token, // sending back the original, not hashed token
 			User:         user,
 		}
 		if terr = a.setCookieTokens(config, newTokenResponse, false, w); terr != nil {
@@ -586,7 +571,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 		Token:        tokenString,
 		TokenType:    "bearer",
 		ExpiresIn:    config.JWT.Exp,
-		RefreshToken: refreshToken.Token,
+		RefreshToken: refreshToken.Token, // sending back the original, not hashed token
 		User:         user,
 	}, nil
 }

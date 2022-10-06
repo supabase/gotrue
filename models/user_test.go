@@ -1,6 +1,7 @@
 package models
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/netlify/gotrue/conf"
@@ -151,10 +152,37 @@ func (ts *UserTestSuite) TestFindUserWithRefreshToken() {
 	r, err := GrantAuthenticatedUser(ts.db, u, GrantParams{})
 	require.NoError(ts.T(), err)
 
-	n, nr, err := FindUserWithRefreshToken(ts.db, r.Token)
+	n, nr, err := FindUserWithRefreshToken(ts.db, r.Token) // using the original not hashed token
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), r.ID, nr.ID)
 	require.Equal(ts.T(), u.ID, n.ID)
+}
+
+func (ts *UserTestSuite) TestFindUserWithRefreshTokenPrefixAttack() {
+	// this scenario simulates an attack where the
+	// attacker has gained access to the hashed token
+	// values in the database and is trying to use one to
+	// look up a user in the database. they should not be
+	// able to do that.
+
+	u := ts.createUser()
+	r, err := GrantAuthenticatedUser(ts.db, u, GrantParams{})
+	require.NoError(ts.T(), err)
+
+	// using the hashed value
+	_, _, err = FindUserWithRefreshToken(ts.db, r.HashedToken)
+	require.Error(ts.T(), err)
+	require.True(ts.T(), IsNotFoundError(err))
+
+	// using the hashed value with a stripped prefix
+	_, _, err = FindUserWithRefreshToken(ts.db, strings.TrimPrefix(r.HashedToken, "H:"))
+	require.Error(ts.T(), err)
+	require.True(ts.T(), IsNotFoundError(err))
+
+	// using the hashed value with a lowercased prefix
+	_, _, err = FindUserWithRefreshToken(ts.db, "h:"+strings.TrimPrefix(r.HashedToken, "H:"))
+	require.Error(ts.T(), err)
+	require.True(ts.T(), IsNotFoundError(err))
 }
 
 func (ts *UserTestSuite) TestIsDuplicatedEmail() {

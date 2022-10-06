@@ -16,7 +16,8 @@ import (
 type RefreshToken struct {
 	ID int64 `db:"id"`
 
-	Token string `db:"token"`
+	Token       string `db:"-"`
+	HashedToken string `db:"token"`
 
 	UserID uuid.UUID `db:"user_id"`
 
@@ -77,7 +78,7 @@ func RevokeTokenFamily(tx *storage.Connection, token *RefreshToken) error {
 			union
 			select r.id, r.user_id, r.token, r.revoked, r.parent from `+tablename+` r inner join token_family t on t.token = r.parent
 		)
-		update `+tablename+` r set revoked = true from token_family where token_family.id = r.id;`, token.Token).Exec()
+		update `+tablename+` r set revoked = true from token_family where token_family.id = r.id;`, token.HashedToken).Exec()
 	}
 	if err != nil {
 		return err
@@ -88,7 +89,7 @@ func RevokeTokenFamily(tx *storage.Connection, token *RefreshToken) error {
 // GetValidChildToken returns the child token of the token provided if the child is not revoked.
 func GetValidChildToken(tx *storage.Connection, token *RefreshToken) (*RefreshToken, error) {
 	refreshToken := &RefreshToken{}
-	err := tx.Q().Where("parent = ? and revoked = false", token.Token).First(refreshToken)
+	err := tx.Q().Where("parent = ? and revoked = false", token.HashedToken).First(refreshToken)
 	if err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, RefreshTokenNotFoundError{}
@@ -99,13 +100,18 @@ func GetValidChildToken(tx *storage.Connection, token *RefreshToken) (*RefreshTo
 }
 
 func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshToken, params *GrantParams) (*RefreshToken, error) {
+	secureToken := crypto.GenerateSecureToken()
+
 	token := &RefreshToken{
 		UserID: user.ID,
-		Token:  crypto.SecureToken(),
-		Parent: "",
+		Token:  secureToken.Original, // returning the original token
+		// storing the hashed token, with H: prefix that identifies
+		// hashed values (for backward compatibility)
+		HashedToken: "H:" + secureToken.Hashed,
+		Parent:      "",
 	}
 	if oldToken != nil {
-		token.Parent = storage.NullString(oldToken.Token)
+		token.Parent = storage.NullString(oldToken.HashedToken)
 		token.SessionId = oldToken.SessionId
 	}
 
@@ -121,6 +127,7 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 	if err := tx.Create(token); err != nil {
 		return nil, errors.Wrap(err, "error creating refresh token")
 	}
+	token.Token = secureToken.Original
 
 	if err := user.UpdateLastSignInAt(tx); err != nil {
 		return nil, errors.Wrap(err, "error update user`s last_sign_in field")
