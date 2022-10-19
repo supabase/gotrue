@@ -23,7 +23,7 @@ type keycloakUser struct {
 }
 
 // NewKeycloakProvider creates a Keycloak account provider.
-func NewKeycloakProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
+func NewKeycloakProvider(ext conf.OAuthProviderConfiguration, proxyURL string, scopes string) (OAuthProvider, error) {
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
@@ -46,6 +46,12 @@ func NewKeycloakProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 		ext.URL = ext.URL[:extURLlen-1]
 	}
 
+	redirectURL := proxyURL
+
+	if redirectURL == "" {
+		redirectURL = ext.RedirectURI
+	}
+
 	return &keycloakProvider{
 		Config: &oauth2.Config{
 			ClientID:     ext.ClientID,
@@ -54,7 +60,7 @@ func NewKeycloakProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 				AuthURL:  ext.URL + "/protocol/openid-connect/auth",
 				TokenURL: ext.URL + "/protocol/openid-connect/token",
 			},
-			RedirectURL: ext.RedirectURI,
+			RedirectURL: redirectURL,
 			Scopes:      oauthScopes,
 		},
 		Host: ext.URL,

@@ -59,7 +59,7 @@ type linkedinElements struct {
 }
 
 // NewLinkedinProvider creates a Linkedin account provider.
-func NewLinkedinProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
+func NewLinkedinProvider(ext conf.OAuthProviderConfiguration, proxyURL string, scopes string) (OAuthProvider, error) {
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
@@ -75,6 +75,12 @@ func NewLinkedinProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
 	}
 
+	redirectURL := proxyURL
+
+	if redirectURL == "" {
+		redirectURL = ext.RedirectURI
+	}
+
 	return &linkedinProvider{
 		Config: &oauth2.Config{
 			ClientID:     ext.ClientID,
@@ -84,7 +90,7 @@ func NewLinkedinProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 				TokenURL: apiPath + "/oauth/v2/accessToken",
 			},
 			Scopes:      oauthScopes,
-			RedirectURL: ext.RedirectURI,
+			RedirectURL: redirectURL,
 		},
 		APIPath: apiPath,
 	}, nil

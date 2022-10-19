@@ -38,12 +38,17 @@ type notionUser struct {
 }
 
 // NewNotionProvider creates a Notion account provider.
-func NewNotionProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, error) {
+func NewNotionProvider(ext conf.OAuthProviderConfiguration, proxyURL string) (OAuthProvider, error) {
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
 
 	authHost := chooseHost(ext.URL, defaultNotionApiBase)
+	redirectURL := proxyURL
+
+	if redirectURL == "" {
+		redirectURL = ext.RedirectURI
+	}
 
 	return &notionProvider{
 		Config: &oauth2.Config{
@@ -53,7 +58,7 @@ func NewNotionProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, erro
 				AuthURL:  authHost + "/v1/oauth/authorize",
 				TokenURL: authHost + "/v1/oauth/token",
 			},
-			RedirectURL: ext.RedirectURI,
+			RedirectURL: redirectURL,
 		},
 		APIPath: authHost,
 	}, nil

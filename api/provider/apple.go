@@ -55,12 +55,17 @@ type idTokenClaims struct {
 }
 
 // NewAppleProvider creates a Apple account provider.
-func NewAppleProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, error) {
+func NewAppleProvider(ext conf.OAuthProviderConfiguration, proxyURL string) (OAuthProvider, error) {
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
 
 	authHost := chooseHost(ext.URL, defaultAppleAPIBase)
+	redirectURL := proxyURL
+
+	if redirectURL == "" {
+		redirectURL = ext.RedirectURI
+	}
 
 	return &AppleProvider{
 		Config: &oauth2.Config{
@@ -74,7 +79,7 @@ func NewAppleProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, error
 				scopeEmail,
 				scopeName,
 			},
-			RedirectURL: ext.RedirectURI,
+			RedirectURL: redirectURL,
 		},
 		UserInfoURL: authHost + idTokenVerificationKeyEndpoint,
 	}, nil

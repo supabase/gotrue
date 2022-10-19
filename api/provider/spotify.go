@@ -33,7 +33,7 @@ type spotifyUserImage struct {
 }
 
 // NewSpotifyProvider creates a Spotify account provider.
-func NewSpotifyProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
+func NewSpotifyProvider(ext conf.OAuthProviderConfiguration, proxyURL string, scopes string) (OAuthProvider, error) {
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
@@ -49,6 +49,12 @@ func NewSpotifyProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAu
 		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
 	}
 
+	redirectURL := proxyURL
+
+	if redirectURL == "" {
+		redirectURL = ext.RedirectURI
+	}
+
 	return &spotifyProvider{
 		Config: &oauth2.Config{
 			ClientID:     ext.ClientID,
@@ -58,7 +64,7 @@ func NewSpotifyProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAu
 				TokenURL: authPath + "/api/token",
 			},
 			Scopes:      oauthScopes,
-			RedirectURL: ext.RedirectURI,
+			RedirectURL: redirectURL,
 		},
 		APIPath: apiPath,
 	}, nil

@@ -25,7 +25,7 @@ type slackUser struct {
 }
 
 // NewSlackProvider creates a Slack account provider.
-func NewSlackProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
+func NewSlackProvider(ext conf.OAuthProviderConfiguration, proxyURL string, scopes string) (OAuthProvider, error) {
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
@@ -43,6 +43,12 @@ func NewSlackProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
 	}
 
+	redirectURL := proxyURL
+
+	if redirectURL == "" {
+		redirectURL = ext.RedirectURI
+	}
+
 	return &slackProvider{
 		Config: &oauth2.Config{
 			ClientID:     ext.ClientID,
@@ -52,7 +58,7 @@ func NewSlackProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 				TokenURL: apiPath + "/oauth.access",
 			},
 			Scopes:      oauthScopes,
-			RedirectURL: ext.RedirectURI,
+			RedirectURL: redirectURL,
 		},
 		APIPath: apiPath,
 	}, nil

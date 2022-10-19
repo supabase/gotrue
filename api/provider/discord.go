@@ -30,7 +30,7 @@ type discordUser struct {
 }
 
 // NewDiscordProvider creates a Discord account provider.
-func NewDiscordProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
+func NewDiscordProvider(ext conf.OAuthProviderConfiguration, proxyURL string, scopes string) (OAuthProvider, error) {
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
@@ -46,6 +46,12 @@ func NewDiscordProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAu
 		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
 	}
 
+	redirectURL := proxyURL
+
+	if redirectURL == "" {
+		redirectURL = ext.RedirectURI
+	}
+
 	return &discordProvider{
 		Config: &oauth2.Config{
 			ClientID:     ext.ClientID,
@@ -55,7 +61,7 @@ func NewDiscordProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAu
 				TokenURL: apiPath + "/oauth2/token",
 			},
 			Scopes:      oauthScopes,
-			RedirectURL: ext.RedirectURI,
+			RedirectURL: redirectURL,
 		},
 		APIPath: apiPath,
 	}, nil

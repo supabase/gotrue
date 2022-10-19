@@ -30,13 +30,18 @@ type zoomUser struct {
 }
 
 // NewZoomProvider creates a Zoom account provider.
-func NewZoomProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, error) {
+func NewZoomProvider(ext conf.OAuthProviderConfiguration, proxyURL string) (OAuthProvider, error) {
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
 
 	apiPath := chooseHost(ext.URL, defaultZoomAPIBase) + "/v2"
 	authPath := chooseHost(ext.URL, defaultZoomAuthBase) + "/oauth"
+	redirectURL := proxyURL
+
+	if redirectURL == "" {
+		redirectURL = ext.RedirectURI
+	}
 
 	return &zoomProvider{
 		Config: &oauth2.Config{
@@ -46,7 +51,7 @@ func NewZoomProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, error)
 				AuthURL:  authPath + "/authorize",
 				TokenURL: authPath + "/token",
 			},
-			RedirectURL: ext.RedirectURI,
+			RedirectURL: redirectURL,
 		},
 		APIPath: apiPath,
 	}, nil

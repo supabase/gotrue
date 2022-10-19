@@ -23,6 +23,7 @@ const (
 	factorKey               = contextKey("factor")
 	sessionKey              = contextKey("session")
 	externalReferrerKey     = contextKey("external_referrer")
+	externalProxyKey        = contextKey("external_proxy")
 	functionHooksKey        = contextKey("function_hooks")
 	adminUserKey            = contextKey("admin_user")
 	oauthTokenKey           = contextKey("oauth_token") // for OAuth1.0, also known as request token
@@ -154,6 +155,19 @@ func withExternalReferrer(ctx context.Context, token string) context.Context {
 
 func getExternalReferrer(ctx context.Context) string {
 	obj := ctx.Value(externalReferrerKey)
+	if obj == nil {
+		return ""
+	}
+
+	return obj.(string)
+}
+
+func withExternalProxy(ctx context.Context, proxy string) context.Context {
+	return context.WithValue(ctx, externalProxyKey, proxy)
+}
+
+func getExternalProxy(ctx context.Context) string {
+	obj := ctx.Value(externalProxyKey)
 	if obj == nil {
 		return ""
 	}

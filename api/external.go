@@ -27,6 +27,7 @@ type ExternalProviderClaims struct {
 	Provider    string `json:"provider"`
 	InviteToken string `json:"invite_token,omitempty"`
 	Referrer    string `json:"referrer,omitempty"`
+	Proxy       string `json:"proxy,omitempty"`
 }
 
 // ExternalSignupParams are the parameters the Signup endpoint accepts
@@ -44,6 +45,11 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	query := r.URL.Query()
 	providerType := query.Get("provider")
 	scopes := query.Get("scopes")
+	proxy := query.Get("proxy")
+
+	if proxy != "" {
+		ctx = withExternalProxy(ctx, proxy)
+	}
 
 	p, err := a.Provider(ctx, providerType, scopes, &query)
 	if err != nil {
@@ -76,6 +82,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		Provider:    providerType,
 		InviteToken: inviteToken,
 		Referrer:    redirectURL,
+		Proxy:       proxy,
 	})
 	tokenString, err := token.SignedString([]byte(config.JWT.Secret))
 	if err != nil {
@@ -397,6 +404,9 @@ func (a *API) loadExternalState(ctx context.Context, state string) (context.Cont
 	if claims.Referrer != "" {
 		ctx = withExternalReferrer(ctx, claims.Referrer)
 	}
+	if claims.Proxy != "" {
+		ctx = withExternalProxy(ctx, claims.Proxy)
+	}
 
 	ctx = withExternalProviderType(ctx, claims.Provider)
 	return withSignature(ctx, state), nil
@@ -406,42 +416,43 @@ func (a *API) loadExternalState(ctx context.Context, state string) (context.Cont
 func (a *API) Provider(ctx context.Context, name string, scopes string, query *url.Values) (provider.Provider, error) {
 	config := a.config
 	name = strings.ToLower(name)
+	proxyURL := getExternalProxy(ctx)
 
 	switch name {
 	case "apple":
-		return provider.NewAppleProvider(config.External.Apple)
+		return provider.NewAppleProvider(config.External.Apple, proxyURL)
 	case "azure":
-		return provider.NewAzureProvider(config.External.Azure, scopes)
+		return provider.NewAzureProvider(config.External.Azure, proxyURL, scopes)
 	case "bitbucket":
-		return provider.NewBitbucketProvider(config.External.Bitbucket)
+		return provider.NewBitbucketProvider(config.External.Bitbucket, proxyURL)
 	case "discord":
-		return provider.NewDiscordProvider(config.External.Discord, scopes)
+		return provider.NewDiscordProvider(config.External.Discord, proxyURL, scopes)
 	case "github":
-		return provider.NewGithubProvider(config.External.Github, scopes)
+		return provider.NewGithubProvider(config.External.Github, proxyURL, scopes)
 	case "gitlab":
-		return provider.NewGitlabProvider(config.External.Gitlab, scopes)
+		return provider.NewGitlabProvider(config.External.Gitlab, proxyURL, scopes)
 	case "google":
-		return provider.NewGoogleProvider(config.External.Google, scopes)
+		return provider.NewGoogleProvider(config.External.Google, proxyURL, scopes)
 	case "keycloak":
-		return provider.NewKeycloakProvider(config.External.Keycloak, scopes)
+		return provider.NewKeycloakProvider(config.External.Keycloak, proxyURL, scopes)
 	case "linkedin":
-		return provider.NewLinkedinProvider(config.External.Linkedin, scopes)
+		return provider.NewLinkedinProvider(config.External.Linkedin, proxyURL, scopes)
 	case "facebook":
-		return provider.NewFacebookProvider(config.External.Facebook, scopes)
+		return provider.NewFacebookProvider(config.External.Facebook, proxyURL, scopes)
 	case "notion":
-		return provider.NewNotionProvider(config.External.Notion)
+		return provider.NewNotionProvider(config.External.Notion, proxyURL)
 	case "spotify":
-		return provider.NewSpotifyProvider(config.External.Spotify, scopes)
+		return provider.NewSpotifyProvider(config.External.Spotify, proxyURL, scopes)
 	case "slack":
-		return provider.NewSlackProvider(config.External.Slack, scopes)
+		return provider.NewSlackProvider(config.External.Slack, proxyURL, scopes)
 	case "twitch":
-		return provider.NewTwitchProvider(config.External.Twitch, scopes)
+		return provider.NewTwitchProvider(config.External.Twitch, proxyURL, scopes)
 	case "twitter":
-		return provider.NewTwitterProvider(config.External.Twitter, scopes)
+		return provider.NewTwitterProvider(config.External.Twitter, proxyURL, scopes)
 	case "workos":
-		return provider.NewWorkOSProvider(config.External.WorkOS, query)
+		return provider.NewWorkOSProvider(config.External.WorkOS, proxyURL, query)
 	case "zoom":
-		return provider.NewZoomProvider(config.External.Zoom)
+		return provider.NewZoomProvider(config.External.Zoom, proxyURL)
 	default:
 		return nil, fmt.Errorf("Provider %s could not be found", name)
 	}

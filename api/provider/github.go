@@ -37,7 +37,7 @@ type githubUserEmail struct {
 }
 
 // NewGithubProvider creates a Github account provider.
-func NewGithubProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
+func NewGithubProvider(ext conf.OAuthProviderConfiguration, proxyURL string, scopes string) (OAuthProvider, error) {
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
@@ -56,6 +56,12 @@ func NewGithubProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
 	}
 
+	redirectURL := proxyURL
+
+	if redirectURL == "" {
+		redirectURL = ext.RedirectURI
+	}
+
 	return &githubProvider{
 		Config: &oauth2.Config{
 			ClientID:     ext.ClientID,
@@ -64,7 +70,7 @@ func NewGithubProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 				AuthURL:  authHost + "/login/oauth/authorize",
 				TokenURL: authHost + "/login/oauth/access_token",
 			},
-			RedirectURL: ext.RedirectURI,
+			RedirectURL: redirectURL,
 			Scopes:      oauthScopes,
 		},
 		APIHost: apiHost,

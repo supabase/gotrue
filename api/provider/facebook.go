@@ -37,7 +37,7 @@ type facebookUser struct {
 }
 
 // NewFacebookProvider creates a Facebook account provider.
-func NewFacebookProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
+func NewFacebookProvider(ext conf.OAuthProviderConfiguration, proxyURL string, scopes string) (OAuthProvider, error) {
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
@@ -54,11 +54,17 @@ func NewFacebookProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
 	}
 
+	redirectURL := proxyURL
+
+	if redirectURL == "" {
+		redirectURL = ext.RedirectURI
+	}
+
 	return &facebookProvider{
 		Config: &oauth2.Config{
 			ClientID:     ext.ClientID,
 			ClientSecret: ext.Secret,
-			RedirectURL:  ext.RedirectURI,
+			RedirectURL:  redirectURL,
 			Endpoint: oauth2.Endpoint{
 				AuthURL:  authHost + "/dialog/oauth",
 				TokenURL: tokenHost + "/oauth/access_token",

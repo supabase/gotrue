@@ -33,7 +33,7 @@ type gitlabUserEmail struct {
 }
 
 // NewGitlabProvider creates a Gitlab account provider.
-func NewGitlabProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
+func NewGitlabProvider(ext conf.OAuthProviderConfiguration, proxyURL string, scopes string) (OAuthProvider, error) {
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
@@ -47,6 +47,12 @@ func NewGitlabProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 	}
 
 	host := chooseHost(ext.URL, defaultGitLabAuthBase)
+	redirectURL := proxyURL
+
+	if redirectURL == "" {
+		redirectURL = ext.RedirectURI
+	}
+
 	return &gitlabProvider{
 		Config: &oauth2.Config{
 			ClientID:     ext.ClientID,
@@ -55,7 +61,7 @@ func NewGitlabProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 				AuthURL:  host + "/oauth/authorize",
 				TokenURL: host + "/oauth/token",
 			},
-			RedirectURL: ext.RedirectURI,
+			RedirectURL: redirectURL,
 			Scopes:      oauthScopes,
 		},
 		Host: host,

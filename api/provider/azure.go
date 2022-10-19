@@ -26,7 +26,7 @@ type azureUser struct {
 }
 
 // NewAzureProvider creates a Azure account provider.
-func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
+func NewAzureProvider(ext conf.OAuthProviderConfiguration, proxyURL string, scopes string) (OAuthProvider, error) {
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
@@ -40,6 +40,12 @@ func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
 	}
 
+	redirectURL := proxyURL
+
+	if redirectURL == "" {
+		redirectURL = ext.RedirectURI
+	}
+
 	return &azureProvider{
 		Config: &oauth2.Config{
 			ClientID:     ext.ClientID,
@@ -48,7 +54,7 @@ func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 				AuthURL:  authHost + "/oauth2/v2.0/authorize",
 				TokenURL: authHost + "/oauth2/v2.0/token",
 			},
-			RedirectURL: ext.RedirectURI,
+			RedirectURL: redirectURL,
 			Scopes:      oauthScopes,
 		},
 		APIPath: apiPath,

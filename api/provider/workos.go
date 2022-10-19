@@ -36,7 +36,7 @@ type workosUser struct {
 }
 
 // NewWorkOSProvider creates a WorkOS account provider.
-func NewWorkOSProvider(ext conf.OAuthProviderConfiguration, query *url.Values) (OAuthProvider, error) {
+func NewWorkOSProvider(ext conf.OAuthProviderConfiguration, proxyURL string, query *url.Values) (OAuthProvider, error) {
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
@@ -59,6 +59,12 @@ func NewWorkOSProvider(ext conf.OAuthProviderConfiguration, query *url.Values) (
 		}
 	}
 
+	redirectURL := proxyURL
+
+	if redirectURL == "" {
+		redirectURL = ext.RedirectURI
+	}
+
 	return &workosProvider{
 		Config: &oauth2.Config{
 			ClientID:     ext.ClientID,
@@ -67,7 +73,7 @@ func NewWorkOSProvider(ext conf.OAuthProviderConfiguration, query *url.Values) (
 				AuthURL:  apiPath + "/sso/authorize",
 				TokenURL: apiPath + "/sso/token",
 			},
-			RedirectURL: ext.RedirectURI,
+			RedirectURL: redirectURL,
 		},
 		APIPath:         apiPath,
 		AuthCodeOptions: authCodeOptions,

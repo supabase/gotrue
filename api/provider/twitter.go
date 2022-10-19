@@ -44,15 +44,21 @@ type twitterUser struct {
 }
 
 // NewTwitterProvider creates a Twitter account provider.
-func NewTwitterProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
+func NewTwitterProvider(ext conf.OAuthProviderConfiguration, proxyURL string, scopes string) (OAuthProvider, error) {
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
 	authHost := chooseHost(ext.URL, defaultTwitterAPIBase)
+	redirectURL := proxyURL
+
+	if redirectURL == "" {
+		redirectURL = ext.RedirectURI
+	}
+
 	p := &TwitterProvider{
 		ClientKey:   ext.ClientID,
 		Secret:      ext.Secret,
-		CallbackURL: ext.RedirectURI,
+		CallbackURL: redirectURL,
 		UserInfoURL: authHost + endpointProfile,
 	}
 	p.Consumer = newConsumer(p, authHost)
