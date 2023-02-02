@@ -339,7 +339,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 					return internalServerError(err.Error())
 				}
 			}
-			return oauthError("invalid_grant", "Invalid Refresh Token").WithInternalMessage("Possible abuse attempt: %v", r)
+			return oauthError("invalid_grant", "Invalid Refresh Token").WithInternalMessage("Possible abuse attempt with refresh tokens. Often this is caused by a buggy implementation of Server-Side Rendering.")
 		}
 	}
 
@@ -439,7 +439,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		// verify nonce to mitigate replay attacks
 		hash := fmt.Sprintf("%x", sha256.Sum256([]byte(params.Nonce)))
 		if hash != hashedNonce.(string) {
-			return oauthError("invalid nonce", "").WithInternalMessage("Possible abuse attempt: %v", r)
+			return oauthError("invalid nonce", "").WithInternalMessage("Possible abuse attempt with refresh tokens. Often this is caused by a buggy implementation of Server-Side Rendering.")
 		}
 	}
 
