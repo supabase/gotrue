@@ -15,6 +15,7 @@ type ProviderSettings struct {
 	Keycloak  bool `json:"keycloak"`
 	Kakao     bool `json:"kakao"`
 	Linkedin  bool `json:"linkedin"`
+	Naver     bool `json:"naver"`
 	Notion    bool `json:"notion"`
 	Spotify   bool `json:"spotify"`
 	Slack     bool `json:"slack"`
@@ -53,6 +54,7 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 			Kakao:     config.External.Kakao.Enabled,
 			Keycloak:  config.External.Keycloak.Enabled,
 			Linkedin:  config.External.Linkedin.Enabled,
+			Naver:     config.External.Naver.Enabled,
 			Notion:    config.External.Notion.Enabled,
 			Spotify:   config.External.Spotify.Enabled,
 			Slack:     config.External.Slack.Enabled,

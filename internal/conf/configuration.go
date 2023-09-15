@@ -193,6 +193,7 @@ type ProviderConfiguration struct {
 	Gitlab                  OAuthProviderConfiguration `json:"gitlab"`
 	Google                  OAuthProviderConfiguration `json:"google"`
 	Kakao                   OAuthProviderConfiguration `json:"kakao"`
+	Naver                   OAuthProviderConfiguration `json:"naver"`
 	Notion                  OAuthProviderConfiguration `json:"notion"`
 	Keycloak                OAuthProviderConfiguration `json:"keycloak"`
 	Linkedin                OAuthProviderConfiguration `json:"linkedin"`
