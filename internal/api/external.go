@@ -520,6 +520,8 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return provider.NewAppleProvider(ctx, config.External.Apple)
 	case "azure":
 		return provider.NewAzureProvider(config.External.Azure, scopes)
+	case "beyondidentity":
+		return provider.NewBeyondIdentityProvider(config.External.BeyondIdentity, scopes)
 	case "bitbucket":
 		return provider.NewBitbucketProvider(config.External.Bitbucket)
 	case "discord":

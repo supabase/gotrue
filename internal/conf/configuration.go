@@ -185,6 +185,7 @@ type EmailContentConfiguration struct {
 type ProviderConfiguration struct {
 	Apple                   OAuthProviderConfiguration `json:"apple"`
 	Azure                   OAuthProviderConfiguration `json:"azure"`
+	BeyondIdentity          OAuthProviderConfiguration `json:"beyondidentity"`
 	Bitbucket               OAuthProviderConfiguration `json:"bitbucket"`
 	Discord                 OAuthProviderConfiguration `json:"discord"`
 	Facebook                OAuthProviderConfiguration `json:"facebook"`
