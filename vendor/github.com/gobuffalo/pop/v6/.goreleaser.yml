@@ -1,0 +1,112 @@
+# GoReleaser config
+
+---
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+- id: pop_darwin
+  binary: soda
+  main: soda/main.go
+  goos:
+    - darwin
+  goarch:
+    - amd64
+  env:
+    - CGO_ENABLED=1
+    - CC=/osxcross/target/bin/o64-clang
+    - CXX=/osxcross/target/bin/o64-clang++
+  flags:
+    - -tags
+    - sqlite
+
+- id: pop_darwin_arm64
+  binary: soda
+  main: soda/main.go
+  goos:
+    - darwin
+  goarch:
+    - arm64
+  env:
+    - CGO_ENABLED=1
+    - CC=/osxcross/target/bin/oa64-clang
+    - CXX=/osxcross/target/bin/oa64-clang++
+  flags:
+    - -tags
+    - sqlite
+
+- id: pop_linux
+  binary: soda
+  main: soda/main.go
+  env:
+    - CGO_ENABLED=0
+  flags:
+    - -tags
+    - sqlite
+  goos:
+    - linux
+  goarch:
+    - amd64
+    - 386
+
+- id: pop_windows_i686
+  binary: soda
+  main: soda/main.go
+  ldflags:
+    - "-extldflags '-static'"
+  env:
+    - CGO_ENABLED=1
+    - CC=i686-w64-mingw32-gcc
+    - CXX=i686-w64-mingw32-g++
+  flags:
+    - -tags
+    - sqlite
+  goos:
+    - windows
+  goarch:
+    - 386
+
+- id: pop_windows_x64
+  binary: soda
+  main: soda/main.go
+  ldflags:
+    - "-extldflags '-static'"
+  env:
+    - CGO_ENABLED=1
+    - CC=x86_64-w64-mingw32-gcc
+    - CXX=x86_64-w64-mingw32-g++
+  flags:
+    - -tags
+    - sqlite
+  goos:
+    - windows
+  goarch:
+    - amd64
+
+archives:
+  - format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  name_template: "{{ .Tag }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+
+brews:
+  - name: 'pop'
+    tap:
+      owner: gobuffalo
+      name: homebrew-tap
+    homepage: "https://gobuffalo.io/documentation/database/pop/"
+    description: "A Tasty Treat For All Your Database Needs"
+    skip_upload: "auto"

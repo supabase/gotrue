@@ -10,11 +10,13 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+
+	"github.com/supabase/gotrue/internal/conf"
 )
 
 var migrateCmd = cobra.Command{
 	Use:  "migrate",
-	Long: "Migrate database strucutures. This will create new tables and add missing columns and indexes.",
+	Long: "Migrate database strucutures. This will create new tables and add missing columns and indexes. Exits with 123 when migrations could not be applied at once.",
 	Run:  migrate,
 }
 
@@ -68,44 +70,75 @@ func migrate(cmd *cobra.Command, args []string) {
 
 	db, err := pop.NewConnection(deets)
 	if err != nil {
-		log.Fatalf("%+v", errors.Wrap(err, "opening db connection"))
+		log.WithError(err).Fatal("opening db connection failed")
 	}
 	defer db.Close()
 
 	if err := db.Open(); err != nil {
-		log.Fatalf("%+v", errors.Wrap(err, "checking database connection"))
+		log.WithError(err).Fatal("checking database connection failed")
 	}
+
+	performMigration(db, globalConfig)
+}
+
+func performMigration(db *pop.Connection, globalConfig *conf.GlobalConfiguration) {
+	log := logrus.StandardLogger()
 
 	log.Debugf("Reading migrations from %s", globalConfig.DB.MigrationsPath)
-	mig, err := pop.NewFileMigrator(globalConfig.DB.MigrationsPath, db)
-	if err != nil {
-		log.Fatalf("%+v", errors.Wrap(err, "creating db migrator"))
-	}
-	log.Debugf("before status")
 
-	if log.Level == logrus.DebugLevel {
-		err = mig.Status(os.Stdout)
+	var migrator pop.FileMigrator
+
+	// PostgreSQL DDL is mostly transactional. We do not wish to apply
+	// migrations partially, even though the migrations are packaged in
+	// single atomic steps. GoTrue releases can be applied in smaller or
+	// larger steps, and we wish for the migrations between two releases to
+	// either apply fully or none at all. If the migrations can't be fully
+	// applied, then there's an issue with the jump from release A to A'.
+	err := db.Transaction(func(tx *pop.Connection) error {
+		mig, err := pop.NewFileMigrator(globalConfig.DB.MigrationsPath, tx)
 		if err != nil {
-			log.Fatalf("%+v", errors.Wrap(err, "migration status"))
+			log.WithError(err).Fatalf("failed to create migrator")
 		}
-	}
 
-	// turn off schema dump
-	mig.SchemaPath = ""
+		migrator = mig
 
-	err = mig.Up()
+		log.Debug("before status")
+		if log.Level == logrus.DebugLevel {
+			err = migrator.Status(os.Stdout)
+			if err != nil {
+				log.WithError(err).Error("migration status issue")
+				return err
+			}
+		}
+
+		// turn off schema dump
+		migrator.SchemaPath = ""
+
+		err = migrator.Up()
+		if err != nil {
+			log.WithError(err).Error("running db migrations in a transaction failed")
+			return err
+		}
+
+		log.Infof("GoTrue migrations ready for commit")
+
+		return nil
+	})
+
 	if err != nil {
-		log.Fatalf("%v", errors.Wrap(err, "running db migrations"))
+		log.WithError(err).Error("failed to commit migrations in a transaction, exiting with 123")
+
+		os.Exit(123) // signal to caller that migrations were unsuccessful
 	} else {
 		log.Infof("GoTrue migrations applied successfully")
-	}
 
-	log.Debugf("after status")
-
-	if log.Level == logrus.DebugLevel {
-		err = mig.Status(os.Stdout)
-		if err != nil {
-			log.Fatalf("%+v", errors.Wrap(err, "migration status"))
+		if log.Level == logrus.DebugLevel {
+			err = migrator.Status(os.Stdout)
+			if err != nil {
+				log.WithError(err).Error("migration status failed")
+			}
 		}
+
+		log.Debug("after status")
 	}
 }

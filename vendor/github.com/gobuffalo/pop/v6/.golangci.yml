@@ -1,0 +1,16 @@
+run:
+  deadline: 1m
+  build-tags:
+    - sqlite
+  linters:
+    enable:
+      - nakedret
+      - maligned
+      - megacheck
+      - misspell
+      - golint
+      - unconvert
+  linters-settings:
+    govet:
+      # report about shadowed variables
+      check-shadowing: true

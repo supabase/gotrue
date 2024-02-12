@@ -1,0 +1,35 @@
+mysql:
+  dialect: "mysql"
+  database: "pop_test"
+  host: {{ envOr "MYSQL_HOST" "127.0.0.1"  }}
+  port: {{ envOr "MYSQL_PORT" "3306"  }}
+  user: {{ envOr "MYSQL_USER"  "root"  }}
+  password: {{ envOr "MYSQL_PASSWORD"  "root#"  }}
+  options:
+    readTimeout: 5s
+
+postgres:
+  url: {{ envOr "POSTGRESQL_URL" "postgres://postgres:postgres%23@localhost:5433/pop_test?sslmode=disable" }}
+  pool: 25
+
+cockroach:
+  # url: "cockroach://root@127.0.0.1:26257/pop_test?application_name=cockroach&sslmode=disable"
+  dialect: "cockroach"
+  database: "pop_test"
+  host: {{ envOr "COCKROACH_HOST" "127.0.0.1"  }}
+  port: {{ envOr "COCKROACH_PORT" "26257"  }}
+  user: {{ envOr "COCKROACH_USER" "root"  }}
+  password: {{ envOr "COCKROACH_PASSWORD" ""  }}
+  options:
+    sslmode: disable
+
+cockroach_ssl:
+  dialect: "cockroach"
+  url: "postgres://root@localhost:26259/pop_test?sslmode=require&sslrootcert=./crdb/certs/ca.crt&sslkey=./crdb/certs/client.root.key&sslcert=./crdb/certs/client.root.crt"
+
+sqlite:
+  dialect: "sqlite3"
+  database: "tmp/test.sqlite"
+  options:
+    lock: true
+
