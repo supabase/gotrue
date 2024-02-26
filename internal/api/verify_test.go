@@ -179,7 +179,7 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 
 		// Generate access token for request
 		var token string
-		token, _, err = ts.API.generateAccessToken(context.Background(), ts.API.db, u, nil, models.MagicLink)
+		token, _, err = ts.API.generateAccessToken(context.Background(), ts.API.db, u, "", models.MagicLink, models.AAL1.String(), []models.AMREntry{})
 		require.NoError(ts.T(), err)
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 

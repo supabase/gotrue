@@ -47,7 +47,11 @@ func (ts *UserTestSuite) SetupTest() {
 }
 
 func (ts *UserTestSuite) generateToken(user *models.User, sessionId *uuid.UUID) string {
-	token, _, err := ts.API.generateAccessToken(context.Background(), ts.API.db, user, sessionId, models.PasswordGrant)
+	sessionIDAsString := ""
+	if sessionId != nil {
+		sessionIDAsString = sessionId.String()
+	}
+	token, _, err := ts.API.generateAccessToken(context.Background(), ts.API.db, user, sessionIDAsString, models.PasswordGrant, models.AAL1.String(), []models.AMREntry{})
 	require.NoError(ts.T(), err, "Error generating access token")
 	return token
 }

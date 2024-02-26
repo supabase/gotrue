@@ -216,8 +216,24 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 
 				issuedToken = newToken
 			}
+			sid := ""
+			aal := models.AAL1.String()
+			amr := []models.AMREntry{}
 
-			tokenString, expiresAt, terr = a.generateAccessToken(ctx, tx, user, issuedToken.SessionId, models.TokenRefresh)
+			if issuedToken.SessionId != nil {
+				sessionId := issuedToken.SessionId
+				sid = sessionId.String()
+				session, terr := models.FindSessionByID(tx, *sessionId, false)
+				if terr != nil {
+					return terr
+				}
+				aal, amr, terr = session.CalculateAALAndAMR(user)
+				if terr != nil {
+					return terr
+				}
+			}
+
+			tokenString, expiresAt, terr = a.generateAccessToken(ctx, tx, user, sid, models.TokenRefresh, aal, amr)
 			if terr != nil {
 				httpErr, ok := terr.(*HTTPError)
 				if ok {

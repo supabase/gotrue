@@ -43,7 +43,7 @@ func (ts *LogoutTestSuite) SetupTest() {
 
 	// generate access token to use for logout
 	var t string
-	t, _, err = ts.API.generateAccessToken(context.Background(), ts.API.db, u, nil, models.PasswordGrant)
+	t, _, err = ts.API.generateAccessToken(context.Background(), ts.API.db, u, "", models.PasswordGrant, models.AAL1.String(), []models.AMREntry{})
 	require.NoError(ts.T(), err)
 	ts.token = t
 }

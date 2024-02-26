@@ -60,7 +60,7 @@ func (ts *InviteTestSuite) makeSuperAdmin(email string) string {
 	u.Role = "supabase_admin"
 
 	var token string
-	token, _, err = ts.API.generateAccessToken(context.Background(), ts.API.db, u, nil, models.Invite)
+	token, _, err = ts.API.generateAccessToken(context.Background(), ts.API.db, u, "", models.Invite, models.AAL1.String(), []models.AMREntry{})
 
 	require.NoError(ts.T(), err, "Error generating access token")
 
