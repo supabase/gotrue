@@ -86,8 +86,17 @@ func (g spotifyProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*U
 
 	var avatarURL string
 
+	// Spotify returns a list of avatars, we want to use the largest one
 	if len(u.Avatars) >= 1 {
-		avatarURL = u.Avatars[0].Url
+		largestAvatar := u.Avatars[0]
+		
+		for _, avatar := range u.Avatars {
+			if avatar.Height * avatar.Width > largestAvatar.Height * largestAvatar.Width {
+				largestAvatar = avatar
+			}
+		}
+		
+		avatarURL = largestAvatar.Url
 	}
 
 	data.Metadata = &Claims{
