@@ -84,6 +84,7 @@ type RequestParams interface {
 		IdTokenGrantParams |
 		InviteParams |
 		OtpParams |
+		AuthCodeGrantParams |
 		PKCEGrantParams |
 		PasswordGrantParams |
 		RecoverParams |

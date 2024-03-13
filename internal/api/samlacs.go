@@ -304,7 +304,7 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 	if flowState != nil {
 		// This means that the callback is using PKCE
 		// Set the flowState.AuthCode to the query param here
-		redirectTo, err = a.prepPKCERedirectURL(redirectTo, flowState.AuthCode)
+		redirectTo, err = a.prepCodeRedirectURL(redirectTo, flowState.AuthCode)
 		if err != nil {
 			return err
 		}

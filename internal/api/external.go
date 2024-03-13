@@ -53,6 +53,7 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 	scopes := query.Get("scopes")
 	codeChallenge := query.Get("code_challenge")
 	codeChallengeMethod := query.Get("code_challenge_method")
+	responseType := query.Get("response_type")
 
 	p, err := a.Provider(ctx, providerType, scopes)
 	if err != nil {
@@ -73,14 +74,15 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 	redirectURL := utilities.GetReferrer(r, config)
 	log := observability.GetLogEntry(r)
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
-	if err := validatePKCEParams(codeChallengeMethod, codeChallenge); err != nil {
+	if err := validateCodeFlowParams(codeChallengeMethod, codeChallenge, responseType); err != nil {
 		return "", err
 	}
-	flowType := getFlowFromChallenge(codeChallenge)
+	// TODO: Adjust this, currently default to PKCE
+	flowType := getFlow(codeChallenge, responseType)
 
 	flowStateID := ""
-	if isPKCEFlow(flowType) {
-		flowState, err := generateFlowState(a.db, providerType, models.OAuth, codeChallengeMethod, codeChallenge, nil)
+	if isCodeFlow(flowType) {
+		flowState, err := generateFlowState(a.db, providerType, models.OAuth, codeChallengeMethod, codeChallenge, nil, flowType)
 		if err != nil {
 			return "", err
 		}
@@ -117,6 +119,7 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 	query.Del("provider")
 	query.Del("code_challenge")
 	query.Del("code_challenge_method")
+	query.Del("response_type")
 	for key := range query {
 		if key == "workos_provider" {
 			// See https://workos.com/docs/reference/sso/authorize/get
@@ -245,7 +248,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	if flowState != nil {
 		// This means that the callback is using PKCE
 		// Set the flowState.AuthCode to the query param here
-		rurl, err = a.prepPKCERedirectURL(rurl, flowState.AuthCode)
+		rurl, err = a.prepCodeRedirectURL(rurl, flowState.AuthCode)
 		if err != nil {
 			return err
 		}

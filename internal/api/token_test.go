@@ -306,7 +306,7 @@ func (ts *TokenTestSuite) TestTokenPKCEGrantFailure() {
 	invalidVerifier := codeVerifier + "123"
 	codeChallenge := sha256.Sum256([]byte(codeVerifier))
 	challenge := base64.RawURLEncoding.EncodeToString(codeChallenge[:])
-	flowState := models.NewFlowState("github", challenge, models.SHA256, models.OAuth, nil)
+	flowState := models.NewPKCEFlowState("github", challenge, models.SHA256, models.OAuth, nil)
 	flowState.AuthCode = authCode
 	require.NoError(ts.T(), ts.API.db.Create(flowState))
 	cases := []struct {
@@ -546,6 +546,7 @@ func (ts *TokenTestSuite) TestMagicLinkPKCESignIn() {
 		CreateUser:          true,
 		CodeChallengeMethod: "s256",
 		CodeChallenge:       challenge,
+		ResponseType:        "code",
 	}))
 	req = httptest.NewRequest(http.MethodPost, "/otp", &buffer)
 	req.Header.Set("Content-Type", "application/json")

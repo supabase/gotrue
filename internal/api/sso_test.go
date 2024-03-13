@@ -648,6 +648,7 @@ func (ts *SSOTestSuite) TestSingleSignOn() {
 				"provider_id":           providers[0].ID,
 				"code_challenge":        "vby3iMQ4XUuycKkEyNsYHXshPql1Dod7Ebey2iXTXm4",
 				"code_challenge_method": "s256",
+				"response_type":         "code",
 			},
 			Code: http.StatusSeeOther,
 			URL:  "https://accounts.google.com/o/saml2?idpid=EXAMPLE-A",

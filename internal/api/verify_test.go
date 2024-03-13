@@ -76,6 +76,7 @@ func (ts *VerifyTestSuite) TestVerifyPasswordRecovery() {
 				// Code Challenge needs to be at least 43 characters long
 				"code_challenge":        "6b151854-cc15-4e29-8db7-3d3a9f15b3066b151854-cc15-4e29-8db7-3d3a9f15b306",
 				"code_challenge_method": models.SHA256.String(),
+				"response_type":         "code",
 			},
 			isPKCE: true,
 		},
@@ -155,6 +156,7 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 				// Code Challenge needs to be at least 43 characters long
 				"code_challenge":        "6b151854-cc15-4e29-8db7-3d3a9f15b3066b151854-cc15-4e29-8db7-3d3a9f15b306",
 				"code_challenge_method": models.SHA256.String(),
+				"reseponse_type":        "code",
 			},
 			isPKCE:       true,
 			currentEmail: newEmail,
@@ -661,7 +663,7 @@ func (ts *VerifyTestSuite) TestVerifyPKCEOTP() {
 			var buffer bytes.Buffer
 			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.payload))
 			codeChallenge := "codechallengecodechallengcodechallengcodechallengcodechallenge" + c.payload.Type
-			flowState := models.NewFlowState(c.authenticationMethod.String(), codeChallenge, models.SHA256, c.authenticationMethod, &u.ID)
+			flowState := models.NewPKCEFlowState(c.authenticationMethod.String(), codeChallenge, models.SHA256, c.authenticationMethod, &u.ID)
 			require.NoError(ts.T(), ts.API.db.Create(flowState))
 
 			requestUrl := fmt.Sprintf("http://localhost/verify?type=%v&token=%v", c.payload.Type, c.payload.Token)

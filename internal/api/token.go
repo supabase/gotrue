@@ -74,6 +74,10 @@ type PKCEGrantParams struct {
 	CodeVerifier string `json:"code_verifier"`
 }
 
+type AuthCodeGrantParams struct {
+	AuthCode string `json:"auth_code"`
+}
+
 const useCookieHeader = "x-use-cookie"
 const InvalidLoginMessage = "Invalid login credentials"
 
@@ -90,9 +94,81 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 		return a.IdTokenGrant(ctx, w, r)
 	case "pkce":
 		return a.PKCE(ctx, w, r)
+	case "code":
+		return a.AuthCode(ctx, w, r)
 	default:
 		return oauthError("unsupported_grant_type", "")
 	}
+}
+
+func (a *API) AuthCode(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	db := a.db.WithContext(ctx)
+	var grantParams models.GrantParams
+
+	// There is a slight problem with this as it will pick-up the
+	// User-Agent and IP addresses from the server if used on the server
+	// side. Currently there's no mechanism to distinguish, but the server
+	// can be told to at least propagate the User-Agent header.
+	grantParams.FillGrantParams(r)
+
+	params := &AuthCodeGrantParams{}
+
+	if err := retrieveRequestParams(r, params); err != nil {
+		return err
+	}
+
+	if params.AuthCode == "" {
+		return badRequestError("invalid request: auth code should be non-empty")
+	}
+
+	flowState, err := models.FindFlowStateByAuthCode(db, params.AuthCode)
+	// Sanity check in case user ID was not set properly
+	if models.IsNotFoundError(err) || flowState.UserID == nil || flowState.FlowType != models.AuthCodeFlow.String() {
+		return forbiddenError("invalid flow state, no valid flow state found")
+	} else if err != nil {
+		return err
+	}
+
+	if flowState.IsExpired(a.config.External.FlowStateExpiryDuration) {
+		return forbiddenError("invalid flow state, flow state has expired")
+	}
+
+	user, err := models.FindUserByID(db, *flowState.UserID)
+	if err != nil {
+		return err
+	}
+	var token *AccessTokenResponse
+	err = db.Transaction(func(tx *storage.Connection) error {
+		var terr error
+		authMethod, err := models.ParseAuthenticationMethod(flowState.AuthenticationMethod)
+		if err != nil {
+			return err
+		}
+		if terr := models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
+			"provider_type": flowState.ProviderType,
+		}); terr != nil {
+			return terr
+		}
+		token, terr = a.issueRefreshToken(ctx, tx, user, authMethod, grantParams)
+		if terr != nil {
+			return oauthError("server_error", terr.Error())
+		}
+		token.ProviderAccessToken = flowState.ProviderAccessToken
+		// Because not all providers give out a refresh token
+		// See corresponding OAuth2 spec: <https://www.rfc-editor.org/rfc/rfc6749.html#section-5.1>
+		if flowState.ProviderRefreshToken != "" {
+			token.ProviderRefreshToken = flowState.ProviderRefreshToken
+		}
+		if terr = tx.Destroy(flowState); terr != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	return sendJSON(w, http.StatusOK, token)
 }
 
 // ResourceOwnerPasswordGrant implements the password grant type flow
@@ -241,7 +317,7 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 
 	flowState, err := models.FindFlowStateByAuthCode(db, params.AuthCode)
 	// Sanity check in case user ID was not set properly
-	if models.IsNotFoundError(err) || flowState.UserID == nil {
+	if models.IsNotFoundError(err) || flowState.UserID == nil || flowState.FlowType != models.PKCEFlow.String() {
 		return forbiddenError("invalid flow state, no valid flow state found")
 	} else if err != nil {
 		return err

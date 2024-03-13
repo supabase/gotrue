@@ -41,33 +41,38 @@ func TestIsValidPKCEParmas(t *testing.T) {
 	cases := []struct {
 		challengeMethod string
 		challenge       string
+		responseType    string
 		expected        error
 	}{
 		{
 			challengeMethod: "",
 			challenge:       "",
+			responseType:    "code",
 			expected:        nil,
 		},
 		{
 			challengeMethod: "test",
 			challenge:       "testtesttesttesttesttesttesttesttesttesttesttesttesttesttesttest",
+			responseType:    "code",
 			expected:        nil,
 		},
 		{
 			challengeMethod: "test",
 			challenge:       "",
+			responseType:    "code",
 			expected:        badRequestError(InvalidPKCEParamsErrorMessage),
 		},
 		{
 			challengeMethod: "",
 			challenge:       "test",
+			responseType:    "code",
 			expected:        badRequestError(InvalidPKCEParamsErrorMessage),
 		},
 	}
 
 	for i, c := range cases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			err := validatePKCEParams(c.challengeMethod, c.challenge)
+			err := validateCodeFlowParams(c.challengeMethod, c.challenge, c.responseType)
 			require.Equal(t, c.expected, err)
 		})
 	}

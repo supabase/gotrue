@@ -14,6 +14,7 @@ type RecoverParams struct {
 	Email               string `json:"email"`
 	CodeChallenge       string `json:"code_challenge"`
 	CodeChallengeMethod string `json:"code_challenge_method"`
+	ResponseType        string `json:"response_type"`
 }
 
 func (p *RecoverParams) Validate() error {
@@ -24,7 +25,7 @@ func (p *RecoverParams) Validate() error {
 	if p.Email, err = validateEmail(p.Email); err != nil {
 		return err
 	}
-	if err := validatePKCEParams(p.CodeChallengeMethod, p.CodeChallenge); err != nil {
+	if err := validateCodeFlowParams(p.CodeChallengeMethod, p.CodeChallenge, p.ResponseType); err != nil {
 		return err
 	}
 	return nil
@@ -40,7 +41,7 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	flowType := getFlowFromChallenge(params.CodeChallenge)
+	flowType := getFlow(params.CodeChallenge, params.ResponseType)
 	if err := params.Validate(); err != nil {
 		return err
 	}
@@ -56,8 +57,8 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		}
 		return internalServerError("Unable to process request").WithInternalError(err)
 	}
-	if isPKCEFlow(flowType) {
-		if _, err := generateFlowState(db, models.Recovery.String(), models.Recovery, params.CodeChallengeMethod, params.CodeChallenge, &(user.ID)); err != nil {
+	if isCodeFlow(flowType) {
+		if _, err := generateFlowState(a.db, models.Recovery.String(), models.Recovery, params.CodeChallengeMethod, params.CodeChallenge, &(user.ID), flowType); err != nil {
 			return err
 		}
 	}

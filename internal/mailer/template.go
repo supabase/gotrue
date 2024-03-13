@@ -278,6 +278,7 @@ func (m *TemplateMailer) MagicLinkMail(user *models.User, otp, referrerURL strin
 		"RedirectTo":      referrerURL,
 	}
 
+
 	return m.Mailer.Mail(
 		user.GetEmail(),
 		withDefault(m.Config.Mailer.Subjects.MagicLink, "Your Magic Link"),

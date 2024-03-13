@@ -21,6 +21,7 @@ type OtpParams struct {
 	Channel             string                 `json:"channel"`
 	CodeChallengeMethod string                 `json:"code_challenge_method"`
 	CodeChallenge       string                 `json:"code_challenge"`
+	ResponseType        string                 `json:"response_type"`
 }
 
 // SmsParams contains the request body params for sms otp
@@ -30,6 +31,7 @@ type SmsParams struct {
 	Data                map[string]interface{} `json:"data"`
 	CodeChallengeMethod string                 `json:"code_challenge_method"`
 	CodeChallenge       string                 `json:"code_challenge"`
+	ResponseType        string                 `json:"response_type"`
 }
 
 func (p *OtpParams) Validate() error {
@@ -39,7 +41,7 @@ func (p *OtpParams) Validate() error {
 	if p.Email != "" && p.Channel != "" {
 		return badRequestError("Channel should only be specified with Phone OTP")
 	}
-	if err := validatePKCEParams(p.CodeChallengeMethod, p.CodeChallenge); err != nil {
+	if err := validateCodeFlowParams(p.CodeChallengeMethod, p.CodeChallenge, p.ResponseType); err != nil {
 		return err
 	}
 	return nil

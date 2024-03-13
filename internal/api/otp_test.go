@@ -58,6 +58,7 @@ func (ts *OtpTestSuite) TestOtpPKCE() {
 				CreateUser:          true,
 				CodeChallengeMethod: "s256",
 				CodeChallenge:       testCodeChallenge,
+				ResponseType:        "code",
 			},
 			expected: struct {
 				code     int
@@ -110,6 +111,7 @@ func (ts *OtpTestSuite) TestOtpPKCE() {
 				CreateUser:          true,
 				CodeChallengeMethod: "s256",
 				CodeChallenge:       testCodeChallenge,
+				ResponseType:        "code",
 			},
 			expected: struct {
 				code     int

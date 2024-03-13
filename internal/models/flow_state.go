@@ -21,6 +21,7 @@ const InvalidCodeMethodError = "code challenge method not supported"
 type FlowState struct {
 	ID                   uuid.UUID  `json:"id" db:"id"`
 	UserID               *uuid.UUID `json:"user_id,omitempty" db:"user_id"`
+	FlowType             string     `json:"flow_type" db:"flow_type"`
 	AuthCode             string     `json:"auth_code" db:"auth_code"`
 	AuthenticationMethod string     `json:"authentication_method" db:"authentication_method"`
 	CodeChallenge        string     `json:"code_challenge" db:"code_challenge"`
@@ -64,6 +65,7 @@ type FlowType int
 
 const (
 	PKCEFlow FlowType = iota
+	AuthCodeFlow
 	ImplicitFlow
 )
 
@@ -71,6 +73,8 @@ func (flowType FlowType) String() string {
 	switch flowType {
 	case PKCEFlow:
 		return "pkce"
+	case AuthCodeFlow:
+		return "code"
 	case ImplicitFlow:
 		return "implicit"
 	}
@@ -82,7 +86,7 @@ func (FlowState) TableName() string {
 	return tableName
 }
 
-func NewFlowState(providerType, codeChallenge string, codeChallengeMethod CodeChallengeMethod, authenticationMethod AuthenticationMethod, userID *uuid.UUID) *FlowState {
+func NewPKCEFlowState(providerType, codeChallenge string, codeChallengeMethod CodeChallengeMethod, authenticationMethod AuthenticationMethod, userID *uuid.UUID) *FlowState {
 	id := uuid.Must(uuid.NewV4())
 	authCode := uuid.Must(uuid.NewV4())
 	flowState := &FlowState{
@@ -91,6 +95,25 @@ func NewFlowState(providerType, codeChallenge string, codeChallengeMethod CodeCh
 		CodeChallenge:        codeChallenge,
 		CodeChallengeMethod:  codeChallengeMethod.String(),
 		AuthCode:             authCode.String(),
+		FlowType:             PKCEFlow.String(),
+		AuthenticationMethod: authenticationMethod.String(),
+		UserID:               userID,
+	}
+	return flowState
+}
+
+func NewAuthCodeFlowState(providerType string, authenticationMethod AuthenticationMethod, userID *uuid.UUID) *FlowState {
+	id := uuid.Must(uuid.NewV4())
+	authCode := uuid.Must(uuid.NewV4())
+	// TODO: decide whether to swap out placeholder values
+	codeChallenge := AuthCodeFlow.String() + "_" + uuid.Must(uuid.NewV4()).String()
+	flowState := &FlowState{
+		ID:                   id,
+		ProviderType:         providerType,
+		CodeChallenge:        codeChallenge,
+		CodeChallengeMethod:  Plain.String(),
+		AuthCode:             authCode.String(),
+		FlowType:             AuthCodeFlow.String(),
 		AuthenticationMethod: authenticationMethod.String(),
 		UserID:               userID,
 	}

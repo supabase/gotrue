@@ -16,6 +16,7 @@ type SingleSignOnParams struct {
 	SkipHTTPRedirect    *bool     `json:"skip_http_redirect"`
 	CodeChallenge       string    `json:"code_challenge"`
 	CodeChallengeMethod string    `json:"code_challenge_method"`
+	ResponseType        string    `json:"response_type"`
 }
 
 type SingleSignOnResponse struct {
@@ -53,15 +54,16 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 	}
 	codeChallengeMethod := params.CodeChallengeMethod
 	codeChallenge := params.CodeChallenge
+	responseType := params.ResponseType
 
-	if err := validatePKCEParams(codeChallengeMethod, codeChallenge); err != nil {
+	if err := validateCodeFlowParams(codeChallengeMethod, codeChallenge, responseType); err != nil {
 		return err
 	}
-	flowType := getFlowFromChallenge(params.CodeChallenge)
+	flowType := getFlow(params.CodeChallenge, params.ResponseType)
 	var flowStateID *uuid.UUID
 	flowStateID = nil
-	if isPKCEFlow(flowType) {
-		flowState, err := generateFlowState(db, models.SSOSAML.String(), models.SSOSAML, codeChallengeMethod, codeChallenge, nil)
+	if isCodeFlow(flowType) {
+		flowState, err := generateFlowState(db, models.SSOSAML.String(), models.SSOSAML, codeChallengeMethod, codeChallenge, nil, flowType)
 		if err != nil {
 			return err
 		}

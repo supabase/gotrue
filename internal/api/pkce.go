@@ -10,6 +10,7 @@ import (
 
 const (
 	PKCEPrefix                    = "pkce_"
+	AuthCodePrefix = "code_"
 	MinCodeChallengeLength        = 43
 	MaxCodeChallengeLength        = 128
 	InvalidPKCEParamsErrorMessage = "PKCE flow requires code_challenge_method and code_challenge"
@@ -30,7 +31,7 @@ func isValidCodeChallenge(codeChallenge string) (bool, error) {
 }
 
 func addFlowPrefixToToken(token string, flowType models.FlowType) string {
-	if isPKCEFlow(flowType) {
+	if isCodeFlow(flowType) {
 		return flowType.String() + "_" + token
 	} else if isImplicitFlow(flowType) {
 		return token
@@ -52,22 +53,37 @@ func issueAuthCode(tx *storage.Connection, user *models.User, authenticationMeth
 	return flowState.AuthCode, nil
 }
 
-func isPKCEFlow(flowType models.FlowType) bool {
-	return flowType == models.PKCEFlow
+func isCodeFlow(flowType models.FlowType) bool {
+	return flowType == models.PKCEFlow || flowType == models.AuthCodeFlow
 }
 
 func isImplicitFlow(flowType models.FlowType) bool {
 	return flowType == models.ImplicitFlow
 }
 
-func validatePKCEParams(codeChallengeMethod, codeChallenge string) error {
-	switch true {
-	case (codeChallenge == "") != (codeChallengeMethod == ""):
+func validateCodeFlowParams(codeChallengeMethod, codeChallenge, responseType string) error {
+	// TODO: simplify this, maybe handle implicit case and then everything else
+	// Immediately return error for implicit case
+	if responseType != "code" && ((codeChallenge != "") != (codeChallengeMethod != "")) {
 		return badRequestError(InvalidPKCEParamsErrorMessage)
-	case codeChallenge != "":
+	}
+	// Code flow case
+	switch true {
+	// PKCE Flow
+	case codeChallenge != "" && codeChallengeMethod != "" && responseType == "code":
 		if valid, err := isValidCodeChallenge(codeChallenge); !valid {
 			return err
 		}
+	// Valid Auth Code Flow
+	case (codeChallenge == "") && (codeChallengeMethod == "") && responseType == "code":
+		return nil
+	// invalid auth code or PKCE Flow
+	case ((codeChallenge != "") && (codeChallengeMethod == "")) && responseType == "code":
+		return badRequestError(InvalidPKCEParamsErrorMessage)
+
+	case (codeChallenge == "") && (codeChallengeMethod != "") && responseType == "code":
+		return badRequestError(InvalidPKCEParamsErrorMessage)
+
 	default:
 		// if both params are empty, just return nil
 		return nil
@@ -75,24 +91,32 @@ func validatePKCEParams(codeChallengeMethod, codeChallenge string) error {
 	return nil
 }
 
-func getFlowFromChallenge(codeChallenge string) models.FlowType {
+func getFlow(codeChallenge string, responseType string) models.FlowType {
 	if codeChallenge != "" {
 		return models.PKCEFlow
+	} else if responseType == "code" {
+		return models.AuthCodeFlow
 	} else {
 		return models.ImplicitFlow
 	}
 }
 
 // Should only be used with Auth Code of PKCE Flows
-func generateFlowState(tx *storage.Connection, providerType string, authenticationMethod models.AuthenticationMethod, codeChallengeMethodParam string, codeChallenge string, userID *uuid.UUID) (*models.FlowState, error) {
-	codeChallengeMethod, err := models.ParseCodeChallengeMethod(codeChallengeMethodParam)
-	if err != nil {
-		return nil, err
+func generateFlowState(tx *storage.Connection, providerType string, authenticationMethod models.AuthenticationMethod, codeChallengeMethodParam string, codeChallenge string, userID *uuid.UUID, flowType models.FlowType) (*models.FlowState, error) {
+	var flowState *models.FlowState
+	if flowType == models.PKCEFlow {
+		codeChallengeMethod, err := models.ParseCodeChallengeMethod(codeChallengeMethodParam)
+		if err != nil {
+			return nil, err
+		}
+		flowState = models.NewPKCEFlowState(providerType, codeChallenge, codeChallengeMethod, authenticationMethod, userID)
+	} else if flowType == models.AuthCodeFlow {
+		flowState = models.NewAuthCodeFlowState(providerType, authenticationMethod, userID)
 	}
-	flowState := models.NewFlowState(providerType, codeChallenge, codeChallengeMethod, authenticationMethod, userID)
 	if err := tx.Create(flowState); err != nil {
 		return nil, err
 	}
+
 	return flowState, nil
 
 }
