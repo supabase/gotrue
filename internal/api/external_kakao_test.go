@@ -75,7 +75,12 @@ func KakaoTestSignupSetup(ts *ExternalTestSuite, tokenCount *int, userCount *int
 							},
 							"email": "%v",
 							"is_email_valid": %v,
-							"is_email_verified": %v
+							"is_email_verified": %v,
+							"name": "김카카오",
+        					"phone_number": "+82 10-1234-5678",
+							"birthyear": "1991",
+							"birthday": "1231",
+        					"gender": "male"
 						}
 					}`, email.Email, email.Verified, email.Verified)
 			} else {
@@ -87,6 +92,11 @@ func KakaoTestSignupSetup(ts *ExternalTestSuite, tokenCount *int, userCount *int
 								"nickname":"Kakao Test",
 								"profile_image_url":"http://example.com/avatar"
 							}
+							"name": "김카카오",
+        					"phone_number": "+82 10-1234-5678",
+							"birthyear": "1991",
+							"birthday": "1231",
+        					"gender": "male"
 						}
 					}`)
 			}
@@ -106,7 +116,19 @@ func (ts *ExternalTestSuite) TestSignupExternalKakao_AuthorizationCode() {
 	server := KakaoTestSignupSetup(ts, &tokenCount, &userCount, code, emails)
 	defer server.Close()
 	u := performAuthorization(ts, "kakao", code, "")
-	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "kakao@example.com", "Kakao Test", "123", "http://example.com/avatar")
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "kakao@example.com", "김카카오", "123", "http://example.com/avatar")
+}
+
+func (ts *ExternalTestSuite) TestSignupExternalKakaoSuccessWithGenderAndBirthdateAndPhone() {
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	emails := `[{"email":"kakao@example.com", "primary": true, "verified": true}]`
+	server := KakaoTestSignupSetup(ts, &tokenCount, &userCount, code, emails)
+	defer server.Close()
+
+	u := performAuthorization(ts, "kakao", code, "")
+
+	assertAuthorizationSuccessWithGenderAndBirthdateAndPhone(ts, u, tokenCount, userCount, "kakao@example.com", "김카카오", "123", "http://example.com/avatar", "male", "19911231", "+82 10-1234-5678")
 }
 
 func (ts *ExternalTestSuite) TestSignupExternalKakaoDisableSignupErrorWhenNoUser() {
@@ -148,7 +170,7 @@ func (ts *ExternalTestSuite) TestSignupExternalKakaoDisableSignupSuccessWithPrim
 
 	u := performAuthorization(ts, "kakao", code, "")
 
-	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "kakao@example.com", "Kakao Test", "123", "http://example.com/avatar")
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "kakao@example.com", "김카카오", "123", "http://example.com/avatar")
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalKakaoSuccessWhenMatchingToken() {
@@ -163,7 +185,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalKakaoSuccessWhenMatchingToke
 
 	u := performAuthorization(ts, "kakao", code, "invite_token")
 
-	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "kakao@example.com", "Kakao Test", "123", "http://example.com/avatar")
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "kakao@example.com", "김카카오", "123", "http://example.com/avatar")
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalKakaoErrorWhenNoMatchingToken() {
@@ -225,7 +247,7 @@ func (ts *ExternalTestSuite) TestSignupExternalKakaoErrorWhenUserBanned() {
 	defer server.Close()
 
 	u := performAuthorization(ts, "kakao", code, "")
-	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "kakao@example.com", "Kakao Test", "123", "http://example.com/avatar")
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "kakao@example.com", "김카카오", "123", "http://example.com/avatar")
 
 	user, err := models.FindUserByEmailAndAudience(ts.API.db, "kakao@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
