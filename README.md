@@ -1,6 +1,6 @@
 # Auth - Authentication and User Management by Supabase
 
-[![Coverage Status](https://coveralls.io/repos/github/supabase/auth/badge.svg?branch=master)](https://coveralls.io/github/supabase/gotrue?branch=master)
+[![Coverage Status](https://coveralls.io/repos/github/supabase/gotrue/badge.svg?branch=master)](https://coveralls.io/github/supabase/gotrue?branch=master)
 
 Auth is a user management and authentication server written in Go that powers
 [Supabase](https://supabase.com)'s features such as:
@@ -31,8 +31,8 @@ Create a `.env` file to store your own custom env vars. See [`example.env`](exam
 2. Build the auth binary: `make build` . You should see an output like this:
 
 ```
-go build -ldflags "-X github.com/supabase/auth/cmd.Version=`git rev-parse HEAD`"
-GOOS=linux GOARCH=arm64 go build -ldflags "-X github.com/supabase/auth/cmd.Version=`git rev-parse HEAD`" -o gotrue-arm64
+go build -ldflags "-X github.com/supabase/gotrue/cmd.Version=`git rev-parse HEAD`"
+GOOS=linux GOARCH=arm64 go build -ldflags "-X github.com/supabase/gotrue/cmd.Version=`git rev-parse HEAD`" -o gotrue-arm64
 ```
 
 3. Execute the auth binary: `./gotrue`
@@ -54,8 +54,8 @@ security updates.
 
 Otherwise, please make sure you setup a process to promptly update to the
 latest version. You can do that by following this repository, specifically the
-[Releases](https://github.com/supabase/auth/releases) and [Security
-Advisories](https://github.com/supabase/auth/security/advisories) sections.
+[Releases](https://github.com/supabase/gotrue/releases) and [Security
+Advisories](https://github.com/supabase/gotrue/security/advisories) sections.
 
 ### Backward compatibility
 
@@ -1186,7 +1186,7 @@ scopes=<optional additional scopes depending on the provider (email and name are
 
 Redirects to provider and then to `/callback`
 
-For apple specific setup see: <https://github.com/supabase/auth#apple-oauth>
+For apple specific setup see: <https://github.com/supabase/gotrue#apple-oauth>
 
 ### **GET /callback**
 
