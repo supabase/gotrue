@@ -150,6 +150,17 @@ type CustomSMSProviderOutput struct {
 	HookError AuthHookError `json:"error,omitempty"`
 }
 
+type CustomEmailProviderInput struct {
+	UserID uuid.UUID `json:"user_id"`
+	Email  string    `json:"email"`
+	OTP    string    `json:"otp"`
+}
+
+type CustomEmailProviderOutput struct {
+	Success   bool          `json:"success"`
+	HookError AuthHookError `json:"error,omitempty"`
+}
+
 func (mf *MFAVerificationAttemptOutput) IsError() bool {
 	return mf.HookError.Message != ""
 }
