@@ -289,14 +289,12 @@ func (a *API) sendConfirmation(r *http.Request, tx *storage.Connection, user *mo
 			OTP:    otp,
 		}
 		output := hooks.CustomEmailProviderOutput{}
-		err := a.invokeHTTPHook(ctx, r, &input, &output, config.Hook.CustomEmailProvider.URI)
-		if err != nil {
-			return err
-		}
-		return nil
-	}
+		err = a.invokeHTTPHook(ctx, r, &input, &output, config.Hook.CustomEmailProvider.URI)
 
-	if err := mailer.ConfirmationMail(r, user, otp, referrerURL, externalURL); err != nil {
+	} else {
+		err = mailer.ConfirmationMail(r, user, otp, referrerURL, externalURL)
+	}
+	if err != nil {
 		user.ConfirmationToken = oldToken
 		return errors.Wrap(err, "Error sending confirmation email")
 	}
@@ -325,7 +323,18 @@ func (a *API) sendInvite(r *http.Request, tx *storage.Connection, u *models.User
 	}
 	u.ConfirmationToken = crypto.GenerateTokenHash(u.GetEmail(), otp)
 	now := time.Now()
-	if err := mailer.InviteMail(r, u, otp, referrerURL, externalURL); err != nil {
+	if config.Hook.CustomEmailProvider.Enabled {
+		input := hooks.CustomEmailProviderInput{
+			UserID: u.ID,
+			Email:  u.Email.String(),
+			OTP:    otp,
+		}
+		output := hooks.CustomEmailProviderOutput{}
+		err = a.invokeHTTPHook(ctx, r, &input, &output, config.Hook.CustomEmailProvider.URI)
+	} else {
+		err = mailer.InviteMail(r, u, otp, referrerURL, externalURL)
+	}
+	if err != nil {
 		u.ConfirmationToken = oldToken
 		return errors.Wrap(err, "Error sending invite email")
 	}
@@ -361,7 +370,19 @@ func (a *API) sendPasswordRecovery(r *http.Request, tx *storage.Connection, u *m
 	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
 	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
 	now := time.Now()
-	if err := mailer.RecoveryMail(r, u, otp, referrerURL, externalURL); err != nil {
+	if config.Hook.CustomEmailProvider.Enabled {
+		input := hooks.CustomEmailProviderInput{
+			UserID: u.ID,
+			Email:  u.Email.String(),
+			OTP:    otp,
+		}
+		output := hooks.CustomEmailProviderOutput{}
+		err = a.invokeHTTPHook(ctx, r, &input, &output, config.Hook.CustomEmailProvider.URI)
+	} else {
+		err = mailer.RecoveryMail(r, u, otp, referrerURL, externalURL)
+	}
+
+	if err != nil {
 		u.RecoveryToken = oldToken
 		return errors.Wrap(err, "Error sending recovery email")
 	}
@@ -379,7 +400,7 @@ func (a *API) sendReauthenticationOtp(r *http.Request, tx *storage.Connection, u
 	maxFrequency := config.SMTP.MaxFrequency
 	otpLength := config.Mailer.OtpLength
 	mailer := a.Mailer()
-	var err error
+	ctx := r.Context()
 
 	if err := validateSentWithinFrequencyLimit(u.ReauthenticationSentAt, maxFrequency); err != nil {
 		return err
@@ -393,7 +414,19 @@ func (a *API) sendReauthenticationOtp(r *http.Request, tx *storage.Connection, u
 	}
 	u.ReauthenticationToken = crypto.GenerateTokenHash(u.GetEmail(), otp)
 	now := time.Now()
-	if err := mailer.ReauthenticateMail(r, u, otp); err != nil {
+	if config.Hook.CustomEmailProvider.Enabled {
+		input := hooks.CustomEmailProviderInput{
+			UserID: u.ID,
+			Email:  u.Email.String(),
+			OTP:    otp,
+		}
+		output := hooks.CustomEmailProviderOutput{}
+		err = a.invokeHTTPHook(ctx, r, &input, &output, config.Hook.CustomEmailProvider.URI)
+	} else {
+		err = mailer.ReauthenticateMail(r, u, otp)
+	}
+
+	if err != nil {
 		u.ReauthenticationToken = oldToken
 		return errors.Wrap(err, "Error sending reauthentication email")
 	}
@@ -431,7 +464,18 @@ func (a *API) sendMagicLink(r *http.Request, tx *storage.Connection, u *models.U
 	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
 
 	now := time.Now()
-	if err := mailer.MagicLinkMail(r, u, otp, referrerURL, externalURL); err != nil {
+	if config.Hook.CustomEmailProvider.Enabled {
+		input := hooks.CustomEmailProviderInput{
+			UserID: u.ID,
+			Email:  u.Email.String(),
+			OTP:    otp,
+		}
+		output := hooks.CustomEmailProviderOutput{}
+		err = a.invokeHTTPHook(ctx, r, &input, &output, config.Hook.CustomEmailProvider.URI)
+	} else {
+		err = mailer.RecoveryMail(r, u, otp, referrerURL, externalURL)
+	}
+	if err != nil {
 		u.RecoveryToken = oldToken
 		return errors.Wrap(err, "Error sending magic link email")
 	}
@@ -479,7 +523,20 @@ func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models
 
 	u.EmailChangeConfirmStatus = zeroConfirmation
 	now := time.Now()
-	if err := mailer.EmailChangeMail(r, u, otpNew, otpCurrent, referrerURL, externalURL); err != nil {
+
+	if config.Hook.CustomEmailProvider.Enabled {
+		// TODO: add in OTP New and additional fields
+		input := hooks.CustomEmailProviderInput{
+			UserID: u.ID,
+			Email:  u.Email.String(),
+			OTP:    otpCurrent,
+		}
+		output := hooks.CustomEmailProviderOutput{}
+		err = a.invokeHTTPHook(ctx, r, &input, &output, config.Hook.CustomEmailProvider.URI)
+	} else {
+		err = mailer.EmailChangeMail(r, u, otpNew, otpCurrent, referrerURL, externalURL)
+	}
+	if err != nil {
 		return err
 	}
 
