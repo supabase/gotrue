@@ -452,6 +452,7 @@ type HookConfiguration struct {
 	PasswordVerificationAttempt ExtensibilityPointConfiguration `json:"password_verification_attempt" split_words:"true"`
 	CustomAccessToken           ExtensibilityPointConfiguration `json:"custom_access_token" split_words:"true"`
 	CustomSMSProvider           ExtensibilityPointConfiguration `json:"custom_sms_provider" split_words:"true"`
+	CustomEmailProvider         ExtensibilityPointConfiguration `json:"custom_email_provider" split_words:"true"`
 }
 
 type HTTPHookSecrets []string
