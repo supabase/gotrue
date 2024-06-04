@@ -117,6 +117,7 @@ type APIConfiguration struct {
 	Endpoint           string
 	RequestIDHeader    string        `envconfig:"REQUEST_ID_HEADER"`
 	ExternalURL        string        `json:"external_url" envconfig:"API_EXTERNAL_URL" required:"true"`
+	ForceExternalURL   bool          `json:"force_external_url" envconfig:"API_FORCE_EXTERNAL_URL" default:"false"`
 	MaxRequestDuration time.Duration `json:"max_request_duration" split_words:"true" default:"10s"`
 }
 
