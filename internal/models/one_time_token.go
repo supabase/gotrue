@@ -128,9 +128,9 @@ func ClearOneTimeTokenForUser(tx *storage.Connection, userID uuid.UUID, tokenTyp
 	return nil
 }
 
-func CreateOneTimeToken(tx *storage.Connection, userID uuid.UUID, relatesTo, tokenHash string, tokenType OneTimeTokenType) error {
+func CreateOneTimeToken(tx *storage.Connection, userID uuid.UUID, relatesTo, tokenHash string, tokenType OneTimeTokenType) (*OneTimeToken, error) {
 	if err := ClearOneTimeTokenForUser(tx, userID, tokenType); err != nil {
-		return err
+		return nil, err
 	}
 
 	oneTimeToken := &OneTimeToken{
@@ -139,13 +139,14 @@ func CreateOneTimeToken(tx *storage.Connection, userID uuid.UUID, relatesTo, tok
 		TokenType: tokenType,
 		TokenHash: tokenHash,
 		RelatesTo: strings.ToLower(relatesTo),
+		CreatedAt: time.Now(),
 	}
 
 	if err := tx.Eager().Create(oneTimeToken); err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return oneTimeToken, nil
 }
 
 func FindOneTimeToken(tx *storage.Connection, tokenHash string, tokenTypes ...OneTimeTokenType) (*OneTimeToken, error) {

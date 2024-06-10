@@ -501,18 +501,16 @@ func (a *API) emailChangeVerify(r *http.Request, conn *storage.Connection, param
 
 			user.EmailChangeConfirmStatus = singleConfirmation
 
-			if params.Token == user.EmailChangeTokenCurrent || params.TokenHash == user.EmailChangeTokenCurrent || (currentOTT != nil && params.TokenHash == currentOTT.TokenHash) {
-				user.EmailChangeTokenCurrent = ""
+			if currentOTT != nil && params.TokenHash == currentOTT.TokenHash {
 				if terr := models.ClearOneTimeTokenForUser(tx, user.ID, models.EmailChangeTokenCurrent); terr != nil {
 					return terr
 				}
-			} else if params.Token == user.EmailChangeTokenNew || params.TokenHash == user.EmailChangeTokenNew || (newOTT != nil && params.TokenHash == newOTT.TokenHash) {
-				user.EmailChangeTokenNew = ""
+			} else if newOTT != nil && params.TokenHash == newOTT.TokenHash {
 				if terr := models.ClearOneTimeTokenForUser(tx, user.ID, models.EmailChangeTokenNew); terr != nil {
 					return terr
 				}
 			}
-			if terr := tx.UpdateOnly(user, "email_change_confirm_status", "email_change_token_current", "email_change_token_new"); terr != nil {
+			if terr := tx.UpdateOnly(user, "email_change_confirm_status"); terr != nil {
 				return terr
 			}
 			return nil
@@ -606,7 +604,10 @@ func (a *API) verifyTokenHash(conn *storage.Connection, params *VerifyParams) (*
 	case mail.EmailOTPVerification:
 		sentAt := user.ConfirmationSentAt
 		params.Type = "signup"
-		if user.RecoveryToken == params.TokenHash {
+		if _, err := models.FindOneTimeToken(conn, params.TokenHash, models.RecoveryToken); err != nil {
+			if !models.IsNotFoundError(err) {
+				return nil, internalServerError("Database error finding token").WithInternalError(err)
+			}
 			sentAt = user.RecoverySentAt
 			params.Type = "magiclink"
 		}
@@ -659,38 +660,34 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 	}
 
 	var isValid bool
-
+	var otpErr error
 	smsProvider, _ := sms_provider.GetSmsProvider(*config)
 	switch params.Type {
 	case mail.EmailOTPVerification:
 		// if the type is emailOTPVerification, we'll check both the confirmation_token and recovery_token columns
-		if isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp) {
-			isValid = true
+		isValid, otpErr = isOtpValid(conn, tokenHash, config.Mailer.OtpExp, models.ConfirmationToken)
+		if otpErr == nil {
 			params.Type = mail.SignupVerification
-		} else if isOtpValid(tokenHash, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp) {
-			isValid = true
+			break
+		}
+		isValid, otpErr = isOtpValid(conn, tokenHash, config.Mailer.OtpExp, models.RecoveryToken)
+		if otpErr == nil {
 			params.Type = mail.MagicLinkVerification
-		} else {
-			isValid = false
+			break
 		}
 	case mail.SignupVerification, mail.InviteVerification:
-		isValid = isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp)
+		isValid, otpErr = isOtpValid(conn, tokenHash, config.Mailer.OtpExp, models.ConfirmationToken)
 	case mail.RecoveryVerification, mail.MagicLinkVerification:
-		isValid = isOtpValid(tokenHash, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp)
+		isValid, otpErr = isOtpValid(conn, tokenHash, config.Mailer.OtpExp, models.RecoveryToken)
 	case mail.EmailChangeVerification:
-		isValid = isOtpValid(tokenHash, user.EmailChangeTokenCurrent, user.EmailChangeSentAt, config.Mailer.OtpExp) ||
-			isOtpValid(tokenHash, user.EmailChangeTokenNew, user.EmailChangeSentAt, config.Mailer.OtpExp)
+		isValid, otpErr = isOtpValid(conn, tokenHash, config.Mailer.OtpExp, models.EmailChangeTokenCurrent, models.EmailChangeTokenNew)
 	case phoneChangeVerification, smsVerification:
 		phone := params.Phone
-		sentAt := user.ConfirmationSentAt
-		expectedToken := user.ConfirmationToken
 		if params.Type == phoneChangeVerification {
 			phone = user.PhoneChange
-			sentAt = user.PhoneChangeSentAt
-			expectedToken = user.PhoneChangeToken
 		}
 		if config.Sms.IsTwilioVerifyProvider() {
-			if testOTP, ok := config.Sms.GetTestOTP(params.Phone, time.Now()); ok {
+			if testOTP, ok := config.Sms.GetTestOTP(phone, time.Now()); ok {
 				if params.Token == testOTP {
 					return user, nil
 				}
@@ -700,7 +697,11 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 			}
 			return user, nil
 		}
-		isValid = isOtpValid(tokenHash, expectedToken, sentAt, config.Sms.OtpExp)
+		isValid, otpErr = isOtpValid(conn, tokenHash, config.Sms.OtpExp, models.ConfirmationToken, models.PhoneChangeToken)
+	}
+
+	if otpErr != nil {
+		return nil, internalServerError("Database error finding token").WithInternalError(err)
 	}
 
 	if !isValid {
@@ -710,11 +711,25 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 }
 
 // isOtpValid checks the actual otp sent against the expected otp and ensures that it's within the valid window
-func isOtpValid(actual, expected string, sentAt *time.Time, otpExp uint) bool {
-	if expected == "" || sentAt == nil {
-		return false
+func isOtpValid(tx *storage.Connection, tokenHash string, otpExp uint, tokenTypes ...models.OneTimeTokenType) (bool, error) {
+	token, err := models.FindOneTimeToken(tx, tokenHash, tokenTypes...)
+	if err != nil {
+		if !models.IsNotFoundError(err) {
+			return false, err
+		}
+		// try again with the pkce prefix
+		token, err = models.FindOneTimeToken(tx, "pkce_"+tokenHash, tokenTypes...)
+		if err != nil {
+			if models.IsNotFoundError(err) {
+				return false, nil
+			}
+			return false, err
+		}
 	}
-	return !isOtpExpired(sentAt, otpExp) && ((actual == expected) || ("pkce_"+actual == expected))
+	if isOtpExpired(&token.CreatedAt, otpExp) {
+		return false, nil
+	}
+	return true, nil
 }
 
 func isOtpExpired(sentAt *time.Time, otpExp uint) bool {

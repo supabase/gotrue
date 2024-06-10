@@ -395,14 +395,17 @@ func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), w.Code, http.StatusOK)
 
+	// check if reauthentication token is created after calling /reauthenticate
 	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
-	require.NotEmpty(ts.T(), u.ReauthenticationToken)
+	reauthenticationToken := u.OneTimeTokens[0].TokenHash
+	require.NotEmpty(ts.T(), reauthenticationToken)
 	require.NotEmpty(ts.T(), u.ReauthenticationSentAt)
 
 	// update reauthentication token to a known token
-	u.ReauthenticationToken = crypto.GenerateTokenHash(u.GetEmail(), "123456")
-	require.NoError(ts.T(), ts.API.db.Update(u))
+	newReauthenticationToken := crypto.GenerateTokenHash(u.GetEmail(), "123456")
+	_, err = models.CreateOneTimeToken(ts.API.db, u.ID, "relates-to-not-used", newReauthenticationToken, models.ReauthenticationToken)
+	require.NoError(ts.T(), err)
 
 	// update password with reauthentication token
 	var buffer bytes.Buffer
@@ -425,7 +428,7 @@ func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 	require.NoError(ts.T(), err)
 
 	require.True(ts.T(), u.Authenticate(context.Background(), "newpass"))
-	require.Empty(ts.T(), u.ReauthenticationToken)
+	require.Empty(ts.T(), u.OneTimeTokens)
 	require.Nil(ts.T(), u.ReauthenticationSentAt)
 }
 

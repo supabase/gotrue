@@ -7,6 +7,7 @@ import (
 
 	"github.com/supabase/auth/internal/hooks"
 	mail "github.com/supabase/auth/internal/mailer"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/badoux/checkmail"
 	"github.com/fatih/structs"
@@ -112,6 +113,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	var ott *models.OneTimeToken
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		switch params.Type {
@@ -119,15 +121,14 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			if terr = models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 				return terr
 			}
-			user.RecoveryToken = hashedToken
 			user.RecoverySentAt = &now
-			terr = tx.UpdateOnly(user, "recovery_token", "recovery_sent_at")
+			terr = tx.UpdateOnly(user, "recovery_sent_at")
 			if terr != nil {
 				terr = errors.Wrap(terr, "Database error updating user for recovery")
 				return terr
 			}
 
-			terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), user.RecoveryToken, models.RecoveryToken)
+			ott, terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), hashedToken, models.RecoveryToken)
 			if terr != nil {
 				terr = errors.Wrap(terr, "Database error creating recovery token in admin")
 				return terr
@@ -172,15 +173,14 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			}); terr != nil {
 				return terr
 			}
-			user.ConfirmationToken = hashedToken
 			user.ConfirmationSentAt = &now
 			user.InvitedAt = &now
-			terr = tx.UpdateOnly(user, "confirmation_token", "confirmation_sent_at", "invited_at")
+			terr = tx.UpdateOnly(user, "confirmation_sent_at", "invited_at")
 			if terr != nil {
 				terr = errors.Wrap(terr, "Database error updating user for invite")
 				return terr
 			}
-			terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), user.ConfirmationToken, models.ConfirmationToken)
+			ott, terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), hashedToken, models.ConfirmationToken)
 			if terr != nil {
 				terr = errors.Wrap(terr, "Database error creating confirmation token for invite in admin")
 				return terr
@@ -211,20 +211,19 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 				}
 				user.Identities = []models.Identity{*identity}
 			}
-			user.ConfirmationToken = hashedToken
 			user.ConfirmationSentAt = &now
-			terr = tx.UpdateOnly(user, "confirmation_token", "confirmation_sent_at")
+			terr = tx.UpdateOnly(user, "confirmation_sent_at")
 			if terr != nil {
 				terr = errors.Wrap(terr, "Database error updating user for confirmation")
 				return terr
 			}
-			terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), user.ConfirmationToken, models.ConfirmationToken)
+			ott, terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), hashedToken, models.ConfirmationToken)
 			if terr != nil {
 				terr = errors.Wrap(terr, "Database error creating confirmation token for signup in admin")
 				return terr
 			}
-		case mail.EmailChangeCurrentVerification, mail.EmailChangeNewVerification:
-			if !config.Mailer.SecureEmailChangeEnabled && params.Type == "email_change_current" {
+		case mail.EmailChangeCurrentVerification:
+			if !config.Mailer.SecureEmailChangeEnabled {
 				return badRequestError(ErrorCodeValidationFailed, "Enable secure email change to generate link for current email")
 			}
 			params.NewEmail, terr = validateEmail(params.NewEmail)
@@ -240,29 +239,33 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			user.EmailChangeSentAt = &now
 			user.EmailChange = params.NewEmail
 			user.EmailChangeConfirmStatus = zeroConfirmation
-			if params.Type == "email_change_current" {
-				user.EmailChangeTokenCurrent = hashedToken
-			} else if params.Type == "email_change_new" {
-				user.EmailChangeTokenNew = crypto.GenerateTokenHash(params.NewEmail, otp)
+			if terr := tx.UpdateOnly(user, "email_change", "email_change_sent_at", "email_change_confirm_status"); terr != nil {
+				return errors.Wrap(terr, "Database error updating user for email change")
 			}
-			terr = tx.UpdateOnly(user, "email_change_token_current", "email_change_token_new", "email_change", "email_change_sent_at", "email_change_confirm_status")
+			ott, terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), hashedToken, models.EmailChangeTokenCurrent)
 			if terr != nil {
-				terr = errors.Wrap(terr, "Database error updating user for email change")
+				return errors.Wrap(terr, "Database error creating email change token current in admin")
+			}
+		case mail.EmailChangeNewVerification:
+			params.NewEmail, terr = validateEmail(params.NewEmail)
+			if terr != nil {
 				return terr
 			}
-			if user.EmailChangeTokenCurrent != "" {
-				terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), user.EmailChangeTokenCurrent, models.EmailChangeTokenCurrent)
-				if terr != nil {
-					terr = errors.Wrap(terr, "Database error creating email change token current in admin")
-					return terr
-				}
+			if duplicateUser, terr := models.IsDuplicatedEmail(tx, params.NewEmail, user.Aud, user); terr != nil {
+				return internalServerError("Database error checking email").WithInternalError(terr)
+			} else if duplicateUser != nil {
+				return unprocessableEntityError(ErrorCodeEmailExists, DuplicateEmailMsg)
 			}
-			if user.EmailChangeTokenNew != "" {
-				terr = models.CreateOneTimeToken(tx, user.ID, user.EmailChange, user.EmailChangeTokenNew, models.EmailChangeTokenNew)
-				if terr != nil {
-					terr = errors.Wrap(terr, "Database error creating email change token new in admin")
-					return terr
-				}
+			now := time.Now()
+			user.EmailChangeSentAt = &now
+			user.EmailChange = params.NewEmail
+			user.EmailChangeConfirmStatus = zeroConfirmation
+			if terr := tx.UpdateOnly(user, "email_change", "email_change_sent_at", "email_change_confirm_status"); terr != nil {
+				return errors.Wrap(terr, "Database error updating user for email change")
+			}
+			ott, terr = models.CreateOneTimeToken(tx, user.ID, user.EmailChange, crypto.GenerateTokenHash(params.NewEmail, otp), models.EmailChangeTokenNew)
+			if terr != nil {
+				return errors.Wrap(terr, "Database error creating email change token new in admin")
 			}
 		default:
 			return badRequestError(ErrorCodeValidationFailed, "Invalid email action link type requested: %v", params.Type)
@@ -273,9 +276,9 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		externalURL := getExternalHost(ctx)
-		url, terr = mailer.GetEmailActionLink(user, params.Type, referrer, externalURL)
+		url, terr = mailer.GetEmailActionLink(ott, params.Type, referrer, externalURL)
 		if terr != nil {
-			return terr
+			return internalServerError("Error generating email action link").WithInternalError(terr)
 		}
 		return nil
 	})
@@ -301,65 +304,51 @@ func (a *API) sendConfirmation(r *http.Request, tx *storage.Connection, u *model
 	maxFrequency := config.SMTP.MaxFrequency
 	otpLength := config.Mailer.OtpLength
 
-	var err error
 	if err := validateSentWithinFrequencyLimit(u.ConfirmationSentAt, maxFrequency); err != nil {
 		return err
 	}
-	oldToken := u.ConfirmationToken
 	otp, err := crypto.GenerateOtp(otpLength)
 	if err != nil {
 		// OTP generation must succeeed
 		panic(err)
 	}
-	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
-	u.ConfirmationToken = addFlowPrefixToToken(token, flowType)
-	now := time.Now()
-	err = a.sendEmail(r, tx, u, mail.SignupVerification, otp, "", u.ConfirmationToken)
-	if err != nil {
-		u.ConfirmationToken = oldToken
-		return errors.Wrap(err, "Error sending confirmation email")
-	}
-	u.ConfirmationSentAt = &now
-	err = tx.UpdateOnly(u, "confirmation_token", "confirmation_sent_at")
-	if err != nil {
-		return errors.Wrap(err, "Database error updating user for confirmation")
-	}
-
-	err = models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.ConfirmationToken, models.ConfirmationToken)
+	token := addFlowPrefixToToken(crypto.GenerateTokenHash(u.GetEmail(), otp), flowType)
+	ott, err := models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), token, models.ConfirmationToken)
 	if err != nil {
 		return errors.Wrap(err, "Database error creating confirmation token")
 	}
-
+	now := time.Now()
+	u.ConfirmationSentAt = &now
+	if err := tx.UpdateOnly(u, "confirmation_sent_at"); err != nil {
+		return errors.Wrap(err, "Database error updating user for confirmation")
+	}
+	if err := a.sendEmail(r, tx, u, ott, mail.SignupVerification, otp); err != nil {
+		return errors.Wrap(err, "Error sending confirmation email")
+	}
 	return nil
 }
 
 func (a *API) sendInvite(r *http.Request, tx *storage.Connection, u *models.User) error {
 	config := a.config
 	otpLength := config.Mailer.OtpLength
-	var err error
-	oldToken := u.ConfirmationToken
 	otp, err := crypto.GenerateOtp(otpLength)
 	if err != nil {
 		// OTP generation must succeed
 		panic(err)
 	}
-	u.ConfirmationToken = crypto.GenerateTokenHash(u.GetEmail(), otp)
-	now := time.Now()
-	err = a.sendEmail(r, tx, u, mail.InviteVerification, otp, "", u.ConfirmationToken)
-	if err != nil {
-		u.ConfirmationToken = oldToken
-		return errors.Wrap(err, "Error sending invite email")
-	}
-	u.InvitedAt = &now
-	u.ConfirmationSentAt = &now
-	err = tx.UpdateOnly(u, "confirmation_token", "confirmation_sent_at", "invited_at")
-	if err != nil {
-		return errors.Wrap(err, "Database error updating user for invite")
-	}
-
-	err = models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.ConfirmationToken, models.ConfirmationToken)
+	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
+	ott, err := models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), token, models.ConfirmationToken)
 	if err != nil {
 		return errors.Wrap(err, "Database error creating confirmation token for invite")
+	}
+	now := time.Now()
+	u.InvitedAt = &now
+	u.ConfirmationSentAt = &now
+	if err := tx.UpdateOnly(u, "confirmation_sent_at", "invited_at"); err != nil {
+		return errors.Wrap(err, "Database error updating user for invite")
+	}
+	if err := a.sendEmail(r, tx, u, ott, mail.InviteVerification, otp); err != nil {
+		return errors.Wrap(err, "Error sending invite email")
 	}
 
 	return nil
@@ -369,34 +358,27 @@ func (a *API) sendPasswordRecovery(r *http.Request, tx *storage.Connection, u *m
 	config := a.config
 	maxFrequency := config.SMTP.MaxFrequency
 	otpLength := config.Mailer.OtpLength
-	var err error
 	if err := validateSentWithinFrequencyLimit(u.RecoverySentAt, maxFrequency); err != nil {
 		return err
 	}
-
-	oldToken := u.RecoveryToken
 	otp, err := crypto.GenerateOtp(otpLength)
 	if err != nil {
 		// OTP generation must succeed
 		panic(err)
 	}
-	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
-	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
-	now := time.Now()
-	err = a.sendEmail(r, tx, u, mail.RecoveryVerification, otp, "", u.RecoveryToken)
+	token := addFlowPrefixToToken(crypto.GenerateTokenHash(u.GetEmail(), otp), flowType)
+	ott, err := models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), token, models.RecoveryToken)
 	if err != nil {
-		u.RecoveryToken = oldToken
-		return errors.Wrap(err, "Error sending recovery email")
+		return errors.Wrap(err, "Database error creating recovery token")
 	}
+	now := time.Now()
 	u.RecoverySentAt = &now
-	err = tx.UpdateOnly(u, "recovery_token", "recovery_sent_at")
+	err = tx.UpdateOnly(u, "recovery_sent_at")
 	if err != nil {
 		return errors.Wrap(err, "Database error updating user for recovery")
 	}
-
-	err = models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.RecoveryToken, models.RecoveryToken)
-	if err != nil {
-		return errors.Wrap(err, "Database error creating recovery token")
+	if err = a.sendEmail(r, tx, u, ott, mail.RecoveryVerification, otp); err != nil {
+		return errors.Wrap(err, "Error sending recovery email")
 	}
 
 	return nil
@@ -406,36 +388,27 @@ func (a *API) sendReauthenticationOtp(r *http.Request, tx *storage.Connection, u
 	config := a.config
 	maxFrequency := config.SMTP.MaxFrequency
 	otpLength := config.Mailer.OtpLength
-	var err error
-
 	if err := validateSentWithinFrequencyLimit(u.ReauthenticationSentAt, maxFrequency); err != nil {
 		return err
 	}
-
-	oldToken := u.ReauthenticationToken
 	otp, err := crypto.GenerateOtp(otpLength)
 	if err != nil {
 		// OTP generation must succeed
 		panic(err)
 	}
-	u.ReauthenticationToken = crypto.GenerateTokenHash(u.GetEmail(), otp)
-	now := time.Now()
-	err = a.sendEmail(r, tx, u, mail.ReauthenticationVerification, otp, "", u.ReauthenticationToken)
-	if err != nil {
-		u.ReauthenticationToken = oldToken
-		return errors.Wrap(err, "Error sending reauthentication email")
-	}
-	u.ReauthenticationSentAt = &now
-	err = tx.UpdateOnly(u, "reauthentication_token", "reauthentication_sent_at")
-	if err != nil {
-		return errors.Wrap(err, "Database error updating user for reauthentication")
-	}
-
-	err = models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.ReauthenticationToken, models.ReauthenticationToken)
+	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
+	ott, err := models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), token, models.ReauthenticationToken)
 	if err != nil {
 		return errors.Wrap(err, "Database error creating reauthentication token")
 	}
-
+	now := time.Now()
+	u.ReauthenticationSentAt = &now
+	if err := tx.UpdateOnly(u, "reauthentication_sent_at"); err != nil {
+		return errors.Wrap(err, "Database error updating user for reauthentication")
+	}
+	if err := a.sendEmail(r, tx, u, ott, mail.ReauthenticationVerification, otp); err != nil {
+		return errors.Wrap(err, "Error sending reauthentication email")
+	}
 	return nil
 }
 
@@ -449,33 +422,24 @@ func (a *API) sendMagicLink(r *http.Request, tx *storage.Connection, u *models.U
 	if err := validateSentWithinFrequencyLimit(u.RecoverySentAt, maxFrequency); err != nil {
 		return err
 	}
-
-	oldToken := u.RecoveryToken
 	otp, err := crypto.GenerateOtp(otpLength)
 	if err != nil {
 		// OTP generation must succeed
 		panic(err)
 	}
-	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
-	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
-
-	now := time.Now()
-	err = a.sendEmail(r, tx, u, mail.MagicLinkVerification, otp, "", u.RecoveryToken)
-	if err != nil {
-		u.RecoveryToken = oldToken
-		return errors.Wrap(err, "Error sending magic link email")
-	}
-	u.RecoverySentAt = &now
-	err = tx.UpdateOnly(u, "recovery_token", "recovery_sent_at")
-	if err != nil {
-		return errors.Wrap(err, "Database error updating user for recovery")
-	}
-
-	err = models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.RecoveryToken, models.RecoveryToken)
+	token := addFlowPrefixToToken(crypto.GenerateTokenHash(u.GetEmail(), otp), flowType)
+	ott, err := models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), token, models.RecoveryToken)
 	if err != nil {
 		return errors.Wrap(err, "Database error creating recovery token")
 	}
-
+	now := time.Now()
+	u.RecoverySentAt = &now
+	if err = tx.UpdateOnly(u, "recovery_sent_at"); err != nil {
+		return errors.Wrap(err, "Database error updating user for recovery")
+	}
+	if err := a.sendEmail(r, tx, u, ott, mail.MagicLinkVerification, otp); err != nil {
+		return errors.Wrap(err, "Error sending magic link email")
+	}
 	return nil
 }
 
@@ -483,7 +447,6 @@ func (a *API) sendMagicLink(r *http.Request, tx *storage.Connection, u *models.U
 func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models.User, email string, flowType models.FlowType) error {
 	config := a.config
 	otpLength := config.Mailer.OtpLength
-	var err error
 	if err := validateSentWithinFrequencyLimit(u.EmailChangeSentAt, config.SMTP.MaxFrequency); err != nil {
 		return err
 	}
@@ -494,53 +457,41 @@ func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models
 		panic(err)
 	}
 	u.EmailChange = email
-	token := crypto.GenerateTokenHash(u.EmailChange, otpNew)
-	u.EmailChangeTokenNew = addFlowPrefixToToken(token, flowType)
+	token := addFlowPrefixToToken(crypto.GenerateTokenHash(u.EmailChange, otpNew), flowType)
+	ottNew, err := models.CreateOneTimeToken(tx, u.ID, u.EmailChange, token, models.EmailChangeTokenNew)
+	if err != nil {
+		return errors.Wrap(err, "Database error creating email change token new")
+	}
 
 	otpCurrent := ""
+	var ottCurrent *models.OneTimeToken
 	if config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
 		otpCurrent, err = crypto.GenerateOtp(otpLength)
 		if err != nil {
 			// OTP generation must succeed
 			panic(err)
 		}
-		currentToken := crypto.GenerateTokenHash(u.GetEmail(), otpCurrent)
-		u.EmailChangeTokenCurrent = addFlowPrefixToToken(currentToken, flowType)
-	}
-
-	u.EmailChangeConfirmStatus = zeroConfirmation
-	now := time.Now()
-	err = a.sendEmail(r, tx, u, mail.EmailChangeVerification, otpCurrent, otpNew, u.EmailChangeTokenNew)
-	if err != nil {
-		return err
-	}
-
-	u.EmailChangeSentAt = &now
-	err = tx.UpdateOnly(
-		u,
-		"email_change_token_current",
-		"email_change_token_new",
-		"email_change",
-		"email_change_sent_at",
-		"email_change_confirm_status",
-	)
-
-	if err != nil {
-		return errors.Wrap(err, "Database error updating user for email change")
-	}
-
-	if u.EmailChangeTokenCurrent != "" {
-		err = models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.EmailChangeTokenCurrent, models.EmailChangeTokenCurrent)
+		currentToken := addFlowPrefixToToken(crypto.GenerateTokenHash(u.GetEmail(), otpCurrent), flowType)
+		ottCurrent, err = models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), currentToken, models.EmailChangeTokenCurrent)
 		if err != nil {
 			return errors.Wrap(err, "Database error creating email change token current")
 		}
 	}
 
-	if u.EmailChangeTokenNew != "" {
-		err = models.CreateOneTimeToken(tx, u.ID, u.EmailChange, u.EmailChangeTokenNew, models.EmailChangeTokenNew)
-		if err != nil {
-			return errors.Wrap(err, "Database error creating email change token new")
-		}
+	now := time.Now()
+	u.EmailChangeConfirmStatus = zeroConfirmation
+	u.EmailChangeSentAt = &now
+	if err := tx.UpdateOnly(
+		u,
+		"email_change",
+		"email_change_sent_at",
+		"email_change_confirm_status",
+	); err != nil {
+		return errors.Wrap(err, "Database error updating user for email change")
+	}
+
+	if err = a.sendEmailChangeEmails(r, tx, u, ottNew, ottCurrent, mail.EmailChangeVerification, otpCurrent, otpNew); err != nil {
+		return err
 	}
 
 	return nil
@@ -566,7 +517,7 @@ func validateSentWithinFrequencyLimit(sentAt *time.Time, frequency time.Duration
 	return nil
 }
 
-func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User, emailActionType, otp, otpNew, tokenHashWithPrefix string) error {
+func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User, ott *models.OneTimeToken, emailActionType, otp string) error {
 	mailer := a.Mailer()
 	ctx := r.Context()
 	config := a.config
@@ -578,34 +529,66 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 			EmailActionType: emailActionType,
 			RedirectTo:      referrerURL,
 			SiteURL:         externalURL.String(),
-			TokenHash:       tokenHashWithPrefix,
-		}
-		if emailActionType == mail.EmailChangeVerification && config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
-			emailData.TokenNew = otpNew
-			emailData.TokenHashNew = u.EmailChangeTokenCurrent
+			TokenHash:       ott.TokenHash,
 		}
 		input := hooks.SendEmailInput{
 			User:      u,
 			EmailData: emailData,
 		}
 		output := hooks.SendEmailOutput{}
-		return a.invokeHook(tx, r, &input, &output, a.config.Hook.SendEmail.URI)
+		return a.invokeHook(tx, r, &input, &output, config.Hook.SendEmail.URI)
 	}
 
 	switch emailActionType {
 	case mail.SignupVerification:
-		return mailer.ConfirmationMail(r, u, otp, referrerURL, externalURL)
+		return mailer.ConfirmationMail(r, u, ott, otp, referrerURL, externalURL)
 	case mail.MagicLinkVerification:
-		return mailer.MagicLinkMail(r, u, otp, referrerURL, externalURL)
+		return mailer.MagicLinkMail(r, u, ott, otp, referrerURL, externalURL)
 	case mail.ReauthenticationVerification:
 		return mailer.ReauthenticateMail(r, u, otp)
 	case mail.RecoveryVerification:
-		return mailer.RecoveryMail(r, u, otp, referrerURL, externalURL)
+		return mailer.RecoveryMail(r, u, ott, otp, referrerURL, externalURL)
 	case mail.InviteVerification:
-		return mailer.InviteMail(r, u, otp, referrerURL, externalURL)
-	case mail.EmailChangeVerification:
-		return mailer.EmailChangeMail(r, u, otpNew, otp, referrerURL, externalURL)
+		return mailer.InviteMail(r, u, ott, otp, referrerURL, externalURL)
 	default:
 		return errors.New("invalid email action type")
 	}
+}
+
+func (a *API) sendEmailChangeEmails(r *http.Request, tx *storage.Connection, u *models.User, ottNew, ottCurrent *models.OneTimeToken, emailActionType, otp, otpNew string) error {
+	mailer := a.Mailer()
+	ctx := r.Context()
+	config := a.config
+	referrerURL := utilities.GetReferrer(r, config)
+	externalURL := getExternalHost(ctx)
+	if config.Hook.SendEmail.Enabled {
+		emailData := mail.EmailData{
+			Token:           otpNew,
+			EmailActionType: emailActionType,
+			RedirectTo:      referrerURL,
+			SiteURL:         externalURL.String(),
+			TokenHash:       ottNew.TokenHash,
+		}
+		if config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
+			emailData.TokenNew = otp
+			emailData.TokenHashNew = ottCurrent.TokenHash
+		}
+		input := hooks.SendEmailInput{
+			User:      u,
+			EmailData: emailData,
+		}
+		output := hooks.SendEmailOutput{}
+		return a.invokeHook(tx, r, &input, &output, config.Hook.SendEmail.URI)
+	}
+
+	wg := new(errgroup.Group)
+	if config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
+		go mailer.EmailChangeMail(r, u, ottCurrent, otp, referrerURL, externalURL)
+	}
+	go mailer.EmailChangeMail(r, u, ottNew, otpNew, referrerURL, externalURL)
+	if err := wg.Wait(); err != nil {
+		// we return the first not-nil error observed
+		return err
+	}
+	return nil
 }

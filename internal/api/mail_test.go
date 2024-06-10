@@ -135,7 +135,7 @@ func (ts *MailTestSuite) TestGenerateLink() {
 			},
 		},
 		{
-			Desc: "Generate email change link",
+			Desc: "Generate email change link current",
 			Body: GenerateLinkParams{
 				Email:    "test@example.com",
 				NewEmail: "new@example.com",
@@ -147,7 +147,7 @@ func (ts *MailTestSuite) TestGenerateLink() {
 			},
 		},
 		{
-			Desc: "Generate email change link",
+			Desc: "Generate email change link new",
 			Body: GenerateLinkParams{
 				Email:    "test@example.com",
 				NewEmail: "new@example.com",

@@ -80,13 +80,14 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 
 // verifyReauthentication checks if the nonce provided is valid
 func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, config *conf.GlobalConfiguration, user *models.User) error {
-	if user.ReauthenticationToken == "" || user.ReauthenticationSentAt == nil {
+	if user.ReauthenticationSentAt == nil {
 		return unprocessableEntityError(ErrorCodeReauthenticationNotValid, InvalidNonceMessage)
 	}
 	var isValid bool
+	var otpErr error
 	if user.GetEmail() != "" {
 		tokenHash := crypto.GenerateTokenHash(user.GetEmail(), nonce)
-		isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Mailer.OtpExp)
+		isValid, otpErr = isOtpValid(tx, tokenHash, config.Mailer.OtpExp, models.ReauthenticationToken)
 	} else if user.GetPhone() != "" {
 		if config.Sms.IsTwilioVerifyProvider() {
 			smsProvider, _ := sms_provider.GetSmsProvider(*config)
@@ -96,10 +97,13 @@ func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, confi
 			return nil
 		} else {
 			tokenHash := crypto.GenerateTokenHash(user.GetPhone(), nonce)
-			isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Sms.OtpExp)
+			isValid, otpErr = isOtpValid(tx, tokenHash, config.Sms.OtpExp, models.ReauthenticationToken)
 		}
 	} else {
 		return unprocessableEntityError(ErrorCodeReauthenticationNotValid, "Reauthentication requires an email or a phone number")
+	}
+	if otpErr != nil {
+		return internalServerError("Database error finding token").WithInternalError(otpErr)
 	}
 	if !isValid {
 		return unprocessableEntityError(ErrorCodeReauthenticationNotValid, InvalidNonceMessage)

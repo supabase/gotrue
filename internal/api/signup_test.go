@@ -123,19 +123,20 @@ func (ts *SignupTestSuite) TestSignupTwice() {
 
 func (ts *SignupTestSuite) TestVerifySignup() {
 	user, err := models.NewUser("123456789", "test@example.com", "testing", ts.Config.JWT.Aud, nil)
-	user.ConfirmationToken = "asdf3"
 	now := time.Now()
 	user.ConfirmationSentAt = &now
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.API.db.Create(user))
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, user.ID, user.GetEmail(), user.ConfirmationToken, models.ConfirmationToken))
+	ott, err := models.CreateOneTimeToken(ts.API.db, user.ID, user.GetEmail(), "test-confirmation-token", models.ConfirmationToken)
+	require.NoError(ts.T(), err)
 
 	// Find test user
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
+	require.NotEmpty(ts.T(), u)
 
 	// Setup request
-	reqUrl := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", mail.SignupVerification, u.ConfirmationToken)
+	reqUrl := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", mail.SignupVerification, ott.TokenHash)
 	req := httptest.NewRequest(http.MethodGet, reqUrl, nil)
 
 	// Setup response recorder

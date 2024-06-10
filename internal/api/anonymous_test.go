@@ -142,8 +142,9 @@ func (ts *AnonymousTestSuite) TestConvertAnonymousUserToPermanent() {
 
 			switch c.verificationType {
 			case mail.EmailChangeVerification:
+				emailChangeToken := user.OneTimeTokens[0].TokenHash
 				require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-					"token_hash": user.EmailChangeTokenNew,
+					"token_hash": emailChangeToken,
 					"type":       c.verificationType,
 				}))
 			case phoneChangeVerification:

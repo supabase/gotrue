@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
+	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/storage/test"
 )
@@ -29,6 +30,10 @@ func setupAPIForTest() (*API, *conf.GlobalConfiguration, error) {
 func setupAPIForTestWithCallback(cb func(*conf.GlobalConfiguration, *storage.Connection)) (*API, *conf.GlobalConfiguration, error) {
 	config, err := conf.LoadGlobal(apiTestConfig)
 	if err != nil {
+		return nil, nil, err
+	}
+
+	if err := observability.ConfigureLogging(&config.Logging); err != nil {
 		return nil, nil, err
 	}
 

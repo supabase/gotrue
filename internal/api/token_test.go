@@ -557,8 +557,9 @@ func (ts *TokenTestSuite) TestMagicLinkPKCESignIn() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
+	recoveryToken := u.OneTimeTokens[0].TokenHash
 	// Verify OTP
-	requestUrl := fmt.Sprintf("http://localhost/verify?type=%v&token=%v", "magiclink", u.RecoveryToken)
+	requestUrl := fmt.Sprintf("http://localhost/verify?type=%v&token=%v", "magiclink", recoveryToken)
 	req = httptest.NewRequest(http.MethodGet, requestUrl, &buffer)
 	req.Header.Set("Content-Type", "application/json")
 

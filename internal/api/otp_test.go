@@ -280,9 +280,10 @@ func (ts *OtpTestSuite) TestSubsequentOtp() {
 
 	newUser, err := models.FindUserByEmailAndAudience(ts.API.db, userEmail, ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
-	require.NotEmpty(ts.T(), newUser.ConfirmationToken)
+
+	require.Len(ts.T(), newUser.OneTimeTokens, 1)
+	require.Equal(ts.T(), models.ConfirmationToken, newUser.OneTimeTokens[0].TokenType)
 	require.NotEmpty(ts.T(), newUser.ConfirmationSentAt)
-	require.Empty(ts.T(), newUser.RecoveryToken)
 	require.Empty(ts.T(), newUser.RecoverySentAt)
 	require.Empty(ts.T(), newUser.EmailConfirmedAt)
 
@@ -303,9 +304,10 @@ func (ts *OtpTestSuite) TestSubsequentOtp() {
 
 	user, err := models.FindUserByEmailAndAudience(ts.API.db, userEmail, ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
-	require.NotEmpty(ts.T(), user.ConfirmationToken)
+
+	require.Len(ts.T(), user.OneTimeTokens, 1)
+	require.Equal(ts.T(), models.ConfirmationToken, user.OneTimeTokens[0].TokenType)
 	require.NotEmpty(ts.T(), user.ConfirmationSentAt)
-	require.Empty(ts.T(), user.RecoveryToken)
 	require.Empty(ts.T(), user.RecoverySentAt)
 	require.Empty(ts.T(), user.EmailConfirmedAt)
 }

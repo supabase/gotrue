@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/crypto"
 	mail "github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
 )
@@ -122,36 +123,46 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 	// disable secure email change
 	ts.Config.Mailer.SecureEmailChangeEnabled = false
 
-	u.ConfirmationToken = "123456"
 	u.ConfirmationSentAt = &now
 	u.EmailChange = "bar@example.com"
 	u.EmailChangeSentAt = &now
-	u.EmailChangeTokenNew = "123456"
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.ConfirmationToken, models.ConfirmationToken))
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.EmailChange, u.EmailChangeTokenNew, models.EmailChangeTokenNew))
+
+	// see sendConfirmation
+	token := addFlowPrefixToToken(crypto.GenerateTokenHash(u.GetEmail(), "123456"), models.ImplicitFlow)
+	confirmationOtt, err := models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), token, models.ConfirmationToken)
+	require.NoError(ts.T(), err)
+	emailChangeNewOtt, err := models.CreateOneTimeToken(ts.API.db, u.ID, u.EmailChange, token, models.EmailChangeTokenNew)
+	require.NoError(ts.T(), err)
 
 	phoneUser, err := models.NewUser("1234567890", "", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	phoneUser.EmailChange = "bar@example.com"
 	phoneUser.EmailChangeSentAt = &now
-	phoneUser.EmailChangeTokenNew = "123456"
 	require.NoError(ts.T(), ts.API.db.Create(phoneUser), "Error saving new test user")
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, phoneUser.ID, phoneUser.EmailChange, phoneUser.EmailChangeTokenNew, models.EmailChangeTokenNew))
+
+	// see sendEmailChange
+	token = addFlowPrefixToToken(crypto.GenerateTokenHash(phoneUser.EmailChange, "123456"), models.ImplicitFlow)
+	phoneUserEmailChangeOtt, err := models.CreateOneTimeToken(ts.API.db, phoneUser.ID, phoneUser.EmailChange, token, models.EmailChangeTokenNew)
+	require.NoError(ts.T(), err)
 
 	emailUser, err := models.NewUser("", "bar@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	phoneUser.PhoneChange = "1234567890"
 	phoneUser.PhoneChangeSentAt = &now
-	phoneUser.PhoneChangeToken = "123456"
 	require.NoError(ts.T(), ts.API.db.Create(emailUser), "Error saving new test user")
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, phoneUser.ID, phoneUser.PhoneChange, phoneUser.PhoneChangeToken, models.PhoneChangeToken))
+
+	// see sendPhoneChange
+	token = crypto.GenerateTokenHash(phoneUser.PhoneChange, "123456")
+	phoneChangeOtt, err := models.CreateOneTimeToken(ts.API.db, phoneUser.ID, phoneUser.PhoneChange, token, models.PhoneChangeToken)
+	require.NoError(ts.T(), err)
 
 	cases := []struct {
 		desc   string
 		params map[string]interface{}
 		// expected map[string]interface{}
 		user *models.User
+		ott  *models.OneTimeToken
 	}{
 		{
 			desc: "Resend signup confirmation",
@@ -160,6 +171,7 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 				"email": u.GetEmail(),
 			},
 			user: u,
+			ott:  confirmationOtt,
 		},
 		{
 			desc: "Resend email change",
@@ -168,6 +180,7 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 				"email": u.GetEmail(),
 			},
 			user: u,
+			ott:  emailChangeNewOtt,
 		},
 		{
 			desc: "Resend email change for phone user",
@@ -176,6 +189,7 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 				"phone": phoneUser.GetPhone(),
 			},
 			user: phoneUser,
+			ott:  phoneUserEmailChangeOtt,
 		},
 		{
 			desc: "Resend phone change for email user",
@@ -184,6 +198,7 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 				"email": emailUser.GetEmail(),
 			},
 			user: emailUser,
+			ott:  phoneChangeOtt,
 		},
 	}
 
@@ -191,6 +206,9 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 		ts.Run(c.desc, func() {
 			var buffer bytes.Buffer
 			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.params))
+
+			// resend endpoint is expected to generate a new token to send to the user
+			// we need to check that the original token doesn't match the new token
 			req := httptest.NewRequest(http.MethodPost, "http://localhost/resend", &buffer)
 			req.Header.Set("Content-Type", "application/json")
 
@@ -205,10 +223,10 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 				require.NotEmpty(ts.T(), dbUser)
 
 				if c.params["type"] == mail.SignupVerification {
-					require.NotEqual(ts.T(), dbUser.ConfirmationToken, c.user.ConfirmationToken)
+					require.NotContains(ts.T(), dbUser.OneTimeTokens, c.ott)
 					require.NotEqual(ts.T(), dbUser.ConfirmationSentAt, c.user.ConfirmationSentAt)
 				} else if c.params["type"] == mail.EmailChangeVerification {
-					require.NotEqual(ts.T(), dbUser.EmailChangeTokenNew, c.user.EmailChangeTokenNew)
+					require.NotContains(ts.T(), dbUser.OneTimeTokens, c.ott)
 					require.NotEqual(ts.T(), dbUser.EmailChangeSentAt, c.user.EmailChangeSentAt)
 				}
 			}

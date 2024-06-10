@@ -88,9 +88,9 @@ func (m TemplateMailer) ValidateEmail(email string) error {
 }
 
 // InviteMail sends a invite mail to a new user
-func (m *TemplateMailer) InviteMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error {
+func (m *TemplateMailer) InviteMail(r *http.Request, user *models.User, ott *models.OneTimeToken, otp, referrerURL string, externalURL *url.URL) error {
 	path, err := getPath(m.Config.Mailer.URLPaths.Invite, &EmailParams{
-		Token:      user.ConfirmationToken,
+		Token:      ott.TokenHash,
 		Type:       "invite",
 		RedirectTo: referrerURL,
 	})
@@ -102,9 +102,9 @@ func (m *TemplateMailer) InviteMail(r *http.Request, user *models.User, otp, ref
 	data := map[string]interface{}{
 		"SiteURL":         m.Config.SiteURL,
 		"ConfirmationURL": externalURL.ResolveReference(path).String(),
-		"Email":           user.Email,
+		"Email":           user.GetEmail(),
 		"Token":           otp,
-		"TokenHash":       user.ConfirmationToken,
+		"TokenHash":       ott.TokenHash,
 		"Data":            user.UserMetaData,
 		"RedirectTo":      referrerURL,
 	}
@@ -119,9 +119,9 @@ func (m *TemplateMailer) InviteMail(r *http.Request, user *models.User, otp, ref
 }
 
 // ConfirmationMail sends a signup confirmation mail to a new user
-func (m *TemplateMailer) ConfirmationMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error {
+func (m *TemplateMailer) ConfirmationMail(r *http.Request, user *models.User, ott *models.OneTimeToken, otp, referrerURL string, externalURL *url.URL) error {
 	path, err := getPath(m.Config.Mailer.URLPaths.Confirmation, &EmailParams{
-		Token:      user.ConfirmationToken,
+		Token:      ott.TokenHash,
 		Type:       "signup",
 		RedirectTo: referrerURL,
 	})
@@ -132,9 +132,9 @@ func (m *TemplateMailer) ConfirmationMail(r *http.Request, user *models.User, ot
 	data := map[string]interface{}{
 		"SiteURL":         m.Config.SiteURL,
 		"ConfirmationURL": externalURL.ResolveReference(path).String(),
-		"Email":           user.Email,
+		"Email":           user.GetEmail(),
 		"Token":           otp,
-		"TokenHash":       user.ConfirmationToken,
+		"TokenHash":       ott.TokenHash,
 		"Data":            user.UserMetaData,
 		"RedirectTo":      referrerURL,
 	}
@@ -152,7 +152,7 @@ func (m *TemplateMailer) ConfirmationMail(r *http.Request, user *models.User, ot
 func (m *TemplateMailer) ReauthenticateMail(r *http.Request, user *models.User, otp string) error {
 	data := map[string]interface{}{
 		"SiteURL": m.Config.SiteURL,
-		"Email":   user.Email,
+		"Email":   user.GetEmail(),
 		"Token":   otp,
 		"Data":    user.UserMetaData,
 	}
@@ -167,84 +167,48 @@ func (m *TemplateMailer) ReauthenticateMail(r *http.Request, user *models.User, 
 }
 
 // EmailChangeMail sends an email change confirmation mail to a user
-func (m *TemplateMailer) EmailChangeMail(r *http.Request, user *models.User, otpNew, otpCurrent, referrerURL string, externalURL *url.URL) error {
-	type Email struct {
-		Address   string
-		Otp       string
-		TokenHash string
-		Subject   string
-		Template  string
-	}
-	emails := []Email{
-		{
-			Address:   user.EmailChange,
-			Otp:       otpNew,
-			TokenHash: user.EmailChangeTokenNew,
-			Subject:   withDefault(m.Config.Mailer.Subjects.EmailChange, "Confirm Email Change"),
-			Template:  m.Config.Mailer.Templates.EmailChange,
+func (m *TemplateMailer) EmailChangeMail(r *http.Request, user *models.User, ott *models.OneTimeToken, otp, referrerURL string, externalURL *url.URL) error {
+	path, err := getPath(
+		m.Config.Mailer.URLPaths.EmailChange,
+		&EmailParams{
+			Token:      ott.TokenHash,
+			Type:       "email_change",
+			RedirectTo: referrerURL,
 		},
+	)
+	if err != nil {
+		return err
 	}
 
-	currentEmail := user.GetEmail()
-	if m.Config.Mailer.SecureEmailChangeEnabled && currentEmail != "" {
-		emails = append(emails, Email{
-			Address:   currentEmail,
-			Otp:       otpCurrent,
-			TokenHash: user.EmailChangeTokenCurrent,
-			Subject:   withDefault(m.Config.Mailer.Subjects.Confirmation, "Confirm Email Address"),
-			Template:  m.Config.Mailer.Templates.EmailChange,
-		})
+	sendingTo := user.EmailChange
+	if ott.TokenType == models.EmailChangeTokenCurrent {
+		sendingTo = user.GetEmail()
 	}
 
-	errors := make(chan error)
-	for _, email := range emails {
-		path, err := getPath(
-			m.Config.Mailer.URLPaths.EmailChange,
-			&EmailParams{
-				Token:      email.TokenHash,
-				Type:       "email_change",
-				RedirectTo: referrerURL,
-			},
-		)
-		if err != nil {
-			return err
-		}
-		go func(address, token, tokenHash, template string) {
-			data := map[string]interface{}{
-				"SiteURL":         m.Config.SiteURL,
-				"ConfirmationURL": externalURL.ResolveReference(path).String(),
-				"Email":           user.GetEmail(),
-				"NewEmail":        user.EmailChange,
-				"Token":           token,
-				"TokenHash":       tokenHash,
-				"SendingTo":       address,
-				"Data":            user.UserMetaData,
-				"RedirectTo":      referrerURL,
-			}
-			errors <- m.Mailer.Mail(
-				address,
-				withDefault(m.Config.Mailer.Subjects.EmailChange, "Confirm Email Change"),
-				template,
-				defaultEmailChangeMail,
-				data,
-			)
-		}(email.Address, email.Otp, email.TokenHash, email.Template)
+	data := map[string]interface{}{
+		"SiteURL":         m.Config.SiteURL,
+		"ConfirmationURL": externalURL.ResolveReference(path).String(),
+		"Email":           user.GetEmail(),
+		"NewEmail":        user.EmailChange,
+		"Token":           otp,
+		"TokenHash":       ott.TokenHash,
+		"SendingTo":       sendingTo,
+		"Data":            user.UserMetaData,
+		"RedirectTo":      referrerURL,
 	}
-
-	for i := 0; i < len(emails); i++ {
-		e := <-errors
-		if e != nil {
-			return e
-		}
-	}
-
-	return nil
+	return m.Mailer.Mail(
+		sendingTo,
+		withDefault(m.Config.Mailer.Subjects.EmailChange, "Confirm Email Change"),
+		m.Config.Mailer.Templates.EmailChange,
+		defaultEmailChangeMail,
+		data,
+	)
 }
 
 // RecoveryMail sends a password recovery mail
-func (m *TemplateMailer) RecoveryMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error {
+func (m *TemplateMailer) RecoveryMail(r *http.Request, user *models.User, ott *models.OneTimeToken, otp, referrerURL string, externalURL *url.URL) error {
 	path, err := getPath(m.Config.Mailer.URLPaths.Recovery, &EmailParams{
-		Token:      user.RecoveryToken,
+		Token:      ott.TokenHash,
 		Type:       "recovery",
 		RedirectTo: referrerURL,
 	})
@@ -254,9 +218,9 @@ func (m *TemplateMailer) RecoveryMail(r *http.Request, user *models.User, otp, r
 	data := map[string]interface{}{
 		"SiteURL":         m.Config.SiteURL,
 		"ConfirmationURL": externalURL.ResolveReference(path).String(),
-		"Email":           user.Email,
+		"Email":           user.GetEmail(),
 		"Token":           otp,
-		"TokenHash":       user.RecoveryToken,
+		"TokenHash":       ott.TokenHash,
 		"Data":            user.UserMetaData,
 		"RedirectTo":      referrerURL,
 	}
@@ -271,9 +235,9 @@ func (m *TemplateMailer) RecoveryMail(r *http.Request, user *models.User, otp, r
 }
 
 // MagicLinkMail sends a login link mail
-func (m *TemplateMailer) MagicLinkMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error {
+func (m *TemplateMailer) MagicLinkMail(r *http.Request, user *models.User, ott *models.OneTimeToken, otp, referrerURL string, externalURL *url.URL) error {
 	path, err := getPath(m.Config.Mailer.URLPaths.Recovery, &EmailParams{
-		Token:      user.RecoveryToken,
+		Token:      ott.TokenHash,
 		Type:       "magiclink",
 		RedirectTo: referrerURL,
 	})
@@ -284,9 +248,9 @@ func (m *TemplateMailer) MagicLinkMail(r *http.Request, user *models.User, otp, 
 	data := map[string]interface{}{
 		"SiteURL":         m.Config.SiteURL,
 		"ConfirmationURL": externalURL.ResolveReference(path).String(),
-		"Email":           user.Email,
+		"Email":           user.GetEmail(),
 		"Token":           otp,
-		"TokenHash":       user.RecoveryToken,
+		"TokenHash":       ott.TokenHash,
 		"Data":            user.UserMetaData,
 		"RedirectTo":      referrerURL,
 	}
@@ -300,56 +264,49 @@ func (m *TemplateMailer) MagicLinkMail(r *http.Request, user *models.User, otp, 
 	)
 }
 
-// Send can be used to send one-off emails to users
-func (m TemplateMailer) Send(user *models.User, subject, body string, data map[string]interface{}) error {
-	return m.Mailer.Mail(
-		user.GetEmail(),
-		subject,
-		"",
-		body,
-		data,
-	)
-}
-
 // GetEmailActionLink returns a magiclink, recovery or invite link based on the actionType passed.
-func (m TemplateMailer) GetEmailActionLink(user *models.User, actionType, referrerURL string, externalURL *url.URL) (string, error) {
+func (m TemplateMailer) GetEmailActionLink(ott *models.OneTimeToken, actionType, referrerURL string, externalURL *url.URL) (string, error) {
+	if ott == nil {
+		return "", fmt.Errorf("ott is nil")
+	}
+
 	var err error
 	var path *url.URL
 
 	switch actionType {
 	case "magiclink":
 		path, err = getPath(m.Config.Mailer.URLPaths.Recovery, &EmailParams{
-			Token:      user.RecoveryToken,
+			Token:      ott.TokenHash,
 			Type:       "magiclink",
 			RedirectTo: referrerURL,
 		})
 	case "recovery":
 		path, err = getPath(m.Config.Mailer.URLPaths.Recovery, &EmailParams{
-			Token:      user.RecoveryToken,
+			Token:      ott.TokenHash,
 			Type:       "recovery",
 			RedirectTo: referrerURL,
 		})
 	case "invite":
 		path, err = getPath(m.Config.Mailer.URLPaths.Invite, &EmailParams{
-			Token:      user.ConfirmationToken,
+			Token:      ott.TokenHash,
 			Type:       "invite",
 			RedirectTo: referrerURL,
 		})
 	case "signup":
 		path, err = getPath(m.Config.Mailer.URLPaths.Confirmation, &EmailParams{
-			Token:      user.ConfirmationToken,
+			Token:      ott.TokenHash,
 			Type:       "signup",
 			RedirectTo: referrerURL,
 		})
 	case "email_change_current":
 		path, err = getPath(m.Config.Mailer.URLPaths.EmailChange, &EmailParams{
-			Token:      user.EmailChangeTokenCurrent,
+			Token:      ott.TokenHash,
 			Type:       "email_change",
 			RedirectTo: referrerURL,
 		})
 	case "email_change_new":
 		path, err = getPath(m.Config.Mailer.URLPaths.EmailChange, &EmailParams{
-			Token:      user.EmailChangeTokenNew,
+			Token:      ott.TokenHash,
 			Type:       "email_change",
 			RedirectTo: referrerURL,
 		})

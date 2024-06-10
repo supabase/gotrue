@@ -585,20 +585,20 @@ func (ts *AdminTestSuite) TestAdminUserSoftDeletion() {
 	// create user
 	u, err := models.NewUser("123456789", "test@example.com", "secret", ts.Config.JWT.Aud, map[string]interface{}{"name": "test"})
 	require.NoError(ts.T(), err)
-	u.ConfirmationToken = "some_token"
-	u.RecoveryToken = "some_token"
-	u.EmailChangeTokenCurrent = "some_token"
-	u.EmailChangeTokenNew = "some_token"
-	u.PhoneChangeToken = "some_token"
 	u.AppMetaData = map[string]interface{}{
 		"provider": "email",
 	}
 	require.NoError(ts.T(), ts.API.db.Create(u))
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.ConfirmationToken, models.ConfirmationToken))
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.RecoveryToken, models.RecoveryToken))
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.EmailChangeTokenCurrent, models.EmailChangeTokenCurrent))
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.EmailChangeTokenNew, models.EmailChangeTokenNew))
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetPhone(), u.PhoneChangeToken, models.PhoneChangeToken))
+	_, err = models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), "some_token", models.ConfirmationToken)
+	require.NoError(ts.T(), err)
+	_, err = models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), "some_token", models.RecoveryToken)
+	require.NoError(ts.T(), err)
+	_, err = models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), "some_token", models.EmailChangeTokenCurrent)
+	require.NoError(ts.T(), err)
+	_, err = models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), "some_token", models.EmailChangeTokenNew)
+	require.NoError(ts.T(), err)
+	_, err = models.CreateOneTimeToken(ts.API.db, u.ID, u.GetPhone(), "some_token", models.PhoneChangeToken)
+	require.NoError(ts.T(), err)
 
 	// create user identities
 	_, err = ts.API.createNewIdentity(ts.API.db, u, "email", map[string]interface{}{
@@ -627,13 +627,10 @@ func (ts *AdminTestSuite) TestAdminUserSoftDeletion() {
 	// get soft-deleted user from db
 	deletedUser, err := models.FindUserByID(ts.API.db, u.ID)
 	require.NoError(ts.T(), err)
-
-	require.Empty(ts.T(), deletedUser.ConfirmationToken)
-	require.Empty(ts.T(), deletedUser.RecoveryToken)
-	require.Empty(ts.T(), deletedUser.EmailChangeTokenCurrent)
-	require.Empty(ts.T(), deletedUser.EmailChangeTokenNew)
 	require.Empty(ts.T(), deletedUser.EncryptedPassword)
-	require.Empty(ts.T(), deletedUser.PhoneChangeToken)
+
+	// one time tokens table should be empty after a soft deletion
+	require.Empty(ts.T(), u.OneTimeTokens)
 	require.Empty(ts.T(), deletedUser.UserMetaData)
 	require.Empty(ts.T(), deletedUser.AppMetaData)
 	require.NotEmpty(ts.T(), deletedUser.DeletedAt)

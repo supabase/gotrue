@@ -45,25 +45,20 @@ func formatPhoneNumber(phone string) string {
 // sendPhoneConfirmation sends an otp to the user's phone number
 func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, user *models.User, phone, otpType string, smsProvider sms_provider.SmsProvider, channel string) (string, error) {
 	config := a.config
-
-	var token *string
 	var sentAt *time.Time
 
 	includeFields := []string{}
 	switch otpType {
 	case phoneChangeVerification:
-		token = &user.PhoneChangeToken
 		sentAt = user.PhoneChangeSentAt
 		user.PhoneChange = phone
-		includeFields = append(includeFields, "phone_change", "phone_change_token", "phone_change_sent_at")
+		includeFields = append(includeFields, "phone_change", "phone_change_sent_at")
 	case phoneConfirmationOtp:
-		token = &user.ConfirmationToken
 		sentAt = user.ConfirmationSentAt
-		includeFields = append(includeFields, "confirmation_token", "confirmation_sent_at")
+		includeFields = append(includeFields, "confirmation_sent_at")
 	case phoneReauthenticationOtp:
-		token = &user.ReauthenticationToken
 		sentAt = user.ReauthenticationSentAt
-		includeFields = append(includeFields, "reauthentication_token", "reauthentication_sent_at")
+		includeFields = append(includeFields, "reauthentication_sent_at")
 	default:
 		return "", internalServerError("invalid otp type")
 	}
@@ -116,7 +111,7 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 		}
 	}
 
-	*token = crypto.GenerateTokenHash(phone, otp)
+	token := crypto.GenerateTokenHash(phone, otp)
 
 	switch otpType {
 	case phoneConfirmationOtp:
@@ -133,15 +128,15 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 
 	switch otpType {
 	case phoneConfirmationOtp:
-		if err := models.CreateOneTimeToken(tx, user.ID, user.GetPhone(), user.ConfirmationToken, models.ConfirmationToken); err != nil {
+		if _, err := models.CreateOneTimeToken(tx, user.ID, user.GetPhone(), token, models.ConfirmationToken); err != nil {
 			return messageID, errors.Wrap(err, "Database error creating confirmation token for phone")
 		}
 	case phoneChangeVerification:
-		if err := models.CreateOneTimeToken(tx, user.ID, user.PhoneChange, user.PhoneChangeToken, models.PhoneChangeToken); err != nil {
+		if _, err := models.CreateOneTimeToken(tx, user.ID, user.PhoneChange, token, models.PhoneChangeToken); err != nil {
 			return messageID, errors.Wrap(err, "Database error creating phone change token")
 		}
 	case phoneReauthenticationOtp:
-		if err := models.CreateOneTimeToken(tx, user.ID, user.GetPhone(), user.ReauthenticationToken, models.ReauthenticationToken); err != nil {
+		if _, err := models.CreateOneTimeToken(tx, user.ID, user.GetPhone(), token, models.ReauthenticationToken); err != nil {
 			return messageID, errors.Wrap(err, "Database error creating reauthentication token for phone")
 		}
 	}

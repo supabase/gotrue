@@ -110,6 +110,7 @@ func doTestSendPhoneConfirmation(ts *PhoneTestSuite, useTestOTP bool) {
 
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
+			require.NoError(ts.T(), models.ClearAllOneTimeTokensForUser(ts.API.db, u.ID))
 			provider := &TestSmsProvider{}
 
 			_, err = ts.API.sendPhoneConfirmation(req, ts.API.db, u, "123456789", c.otpType, provider, sms_provider.SMSProvider)
@@ -127,15 +128,19 @@ func doTestSendPhoneConfirmation(ts *PhoneTestSuite, useTestOTP bool) {
 
 			switch c.otpType {
 			case phoneConfirmationOtp:
-				require.NotEmpty(ts.T(), u.ConfirmationToken)
+				require.NotEmpty(ts.T(), u.OneTimeTokens[0].TokenHash)
+				require.Equal(ts.T(), u.OneTimeTokens[0].TokenType, models.ConfirmationToken)
 				require.NotEmpty(ts.T(), u.ConfirmationSentAt)
 			case phoneChangeVerification:
-				require.NotEmpty(ts.T(), u.PhoneChangeToken)
+				require.NotEmpty(ts.T(), u.OneTimeTokens[0].TokenHash)
+				require.Equal(ts.T(), u.OneTimeTokens[0].TokenType, models.PhoneChangeToken)
 				require.NotEmpty(ts.T(), u.PhoneChangeSentAt)
 			case phoneReauthenticationOtp:
-				require.NotEmpty(ts.T(), u.ReauthenticationToken)
+				require.NotEmpty(ts.T(), u.OneTimeTokens[0].TokenHash)
+				require.Equal(ts.T(), u.OneTimeTokens[0].TokenType, models.ReauthenticationToken)
 				require.NotEmpty(ts.T(), u.ReauthenticationSentAt)
 			default:
+				require.Empty(ts.T(), u.OneTimeTokens)
 			}
 		})
 	}
