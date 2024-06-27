@@ -587,7 +587,7 @@ Email subject to use for email change confirmation. Defaults to `Confirm Email C
 `MAILER_TEMPLATES_INVITE` - `string`
 
 URL path to an email template to use when inviting a user. (e.g. `https://www.example.com/path-to-email-template.html`)
-`SiteURL`, `Email`, and `ConfirmationURL` variables are available.
+`SiteURL`, `Email`, `MailType`, and `ConfirmationURL` variables are available.
 
 Default Content (if template is unavailable):
 
@@ -604,7 +604,7 @@ Default Content (if template is unavailable):
 `MAILER_TEMPLATES_CONFIRMATION` - `string`
 
 URL path to an email template to use when confirming a signup. (e.g. `https://www.example.com/path-to-email-template.html`)
-`SiteURL`, `Email`, and `ConfirmationURL` variables are available.
+`SiteURL`, `Email`, `MailType`, and `ConfirmationURL` variables are available.
 
 Default Content (if template is unavailable):
 
@@ -618,7 +618,7 @@ Default Content (if template is unavailable):
 `MAILER_TEMPLATES_RECOVERY` - `string`
 
 URL path to an email template to use when resetting a password. (e.g. `https://www.example.com/path-to-email-template.html`)
-`SiteURL`, `Email`, and `ConfirmationURL` variables are available.
+`SiteURL`, `Email`, `MailType`, and `ConfirmationURL` variables are available.
 
 Default Content (if template is unavailable):
 
@@ -632,7 +632,7 @@ Default Content (if template is unavailable):
 `MAILER_TEMPLATES_MAGIC_LINK` - `string`
 
 URL path to an email template to use when sending magic link. (e.g. `https://www.example.com/path-to-email-template.html`)
-`SiteURL`, `Email`, and `ConfirmationURL` variables are available.
+`SiteURL`, `Email`, `MailType`, and `ConfirmationURL` variables are available.
 
 Default Content (if template is unavailable):
 
@@ -646,7 +646,7 @@ Default Content (if template is unavailable):
 `MAILER_TEMPLATES_EMAIL_CHANGE` - `string`
 
 URL path to an email template to use when confirming the change of an email address. (e.g. `https://www.example.com/path-to-email-template.html`)
-`SiteURL`, `Email`, `NewEmail`, and `ConfirmationURL` variables are available.
+`SiteURL`, `Email`, `NewEmail`, `MailType`, and `ConfirmationURL` variables are available.
 
 Default Content (if template is unavailable):
 

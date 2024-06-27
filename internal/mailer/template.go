@@ -39,7 +39,7 @@ const (
 	RecoveryVerification           = "recovery"
 	InviteVerification             = "invite"
 	MagicLinkVerification          = "magiclink"
-	EmailChangeVerification        = "email_change"
+	EmailChangeMailType            = "email_change"
 	EmailOTPVerification           = "email"
 	EmailChangeCurrentVerification = "email_change_current"
 	EmailChangeNewVerification     = "email_change_new"
@@ -91,7 +91,7 @@ func (m TemplateMailer) ValidateEmail(email string) error {
 func (m *TemplateMailer) InviteMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error {
 	path, err := getPath(m.Config.Mailer.URLPaths.Invite, &EmailParams{
 		Token:      user.ConfirmationToken,
-		Type:       "invite",
+		Type:       InviteVerification,
 		RedirectTo: referrerURL,
 	})
 
@@ -107,6 +107,7 @@ func (m *TemplateMailer) InviteMail(r *http.Request, user *models.User, otp, ref
 		"TokenHash":       user.ConfirmationToken,
 		"Data":            user.UserMetaData,
 		"RedirectTo":      referrerURL,
+		"MailType":        InviteVerification,
 	}
 
 	return m.Mailer.Mail(
@@ -122,7 +123,7 @@ func (m *TemplateMailer) InviteMail(r *http.Request, user *models.User, otp, ref
 func (m *TemplateMailer) ConfirmationMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error {
 	path, err := getPath(m.Config.Mailer.URLPaths.Confirmation, &EmailParams{
 		Token:      user.ConfirmationToken,
-		Type:       "signup",
+		Type:       SignupVerification,
 		RedirectTo: referrerURL,
 	})
 	if err != nil {
@@ -137,6 +138,7 @@ func (m *TemplateMailer) ConfirmationMail(r *http.Request, user *models.User, ot
 		"TokenHash":       user.ConfirmationToken,
 		"Data":            user.UserMetaData,
 		"RedirectTo":      referrerURL,
+		"MailType":        SignupVerification,
 	}
 
 	return m.Mailer.Mail(
@@ -202,7 +204,7 @@ func (m *TemplateMailer) EmailChangeMail(r *http.Request, user *models.User, otp
 			m.Config.Mailer.URLPaths.EmailChange,
 			&EmailParams{
 				Token:      email.TokenHash,
-				Type:       "email_change",
+				Type:       EmailChangeMailType,
 				RedirectTo: referrerURL,
 			},
 		)
@@ -220,6 +222,7 @@ func (m *TemplateMailer) EmailChangeMail(r *http.Request, user *models.User, otp
 				"SendingTo":       address,
 				"Data":            user.UserMetaData,
 				"RedirectTo":      referrerURL,
+				"MailType":        EmailChangeMailType,
 			}
 			errors <- m.Mailer.Mail(
 				address,
@@ -245,7 +248,7 @@ func (m *TemplateMailer) EmailChangeMail(r *http.Request, user *models.User, otp
 func (m *TemplateMailer) RecoveryMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error {
 	path, err := getPath(m.Config.Mailer.URLPaths.Recovery, &EmailParams{
 		Token:      user.RecoveryToken,
-		Type:       "recovery",
+		Type:       RecoveryVerification,
 		RedirectTo: referrerURL,
 	})
 	if err != nil {
@@ -259,6 +262,7 @@ func (m *TemplateMailer) RecoveryMail(r *http.Request, user *models.User, otp, r
 		"TokenHash":       user.RecoveryToken,
 		"Data":            user.UserMetaData,
 		"RedirectTo":      referrerURL,
+		"MailType":        RecoveryVerification,
 	}
 
 	return m.Mailer.Mail(
@@ -274,7 +278,7 @@ func (m *TemplateMailer) RecoveryMail(r *http.Request, user *models.User, otp, r
 func (m *TemplateMailer) MagicLinkMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error {
 	path, err := getPath(m.Config.Mailer.URLPaths.Recovery, &EmailParams{
 		Token:      user.RecoveryToken,
-		Type:       "magiclink",
+		Type:       MagicLinkVerification,
 		RedirectTo: referrerURL,
 	})
 	if err != nil {
@@ -289,6 +293,7 @@ func (m *TemplateMailer) MagicLinkMail(r *http.Request, user *models.User, otp, 
 		"TokenHash":       user.RecoveryToken,
 		"Data":            user.UserMetaData,
 		"RedirectTo":      referrerURL,
+		"MailType":        MagicLinkVerification,
 	}
 
 	return m.Mailer.Mail(
@@ -317,28 +322,28 @@ func (m TemplateMailer) GetEmailActionLink(user *models.User, actionType, referr
 	var path *url.URL
 
 	switch actionType {
-	case "magiclink":
+	case MagicLinkVerification:
 		path, err = getPath(m.Config.Mailer.URLPaths.Recovery, &EmailParams{
 			Token:      user.RecoveryToken,
-			Type:       "magiclink",
+			Type:       MagicLinkVerification,
 			RedirectTo: referrerURL,
 		})
-	case "recovery":
+	case RecoveryVerification:
 		path, err = getPath(m.Config.Mailer.URLPaths.Recovery, &EmailParams{
 			Token:      user.RecoveryToken,
-			Type:       "recovery",
+			Type:       RecoveryVerification,
 			RedirectTo: referrerURL,
 		})
-	case "invite":
+	case InviteVerification:
 		path, err = getPath(m.Config.Mailer.URLPaths.Invite, &EmailParams{
 			Token:      user.ConfirmationToken,
-			Type:       "invite",
+			Type:       InviteVerification,
 			RedirectTo: referrerURL,
 		})
-	case "signup":
+	case SignupVerification:
 		path, err = getPath(m.Config.Mailer.URLPaths.Confirmation, &EmailParams{
 			Token:      user.ConfirmationToken,
-			Type:       "signup",
+			Type:       SignupVerification,
 			RedirectTo: referrerURL,
 		})
 	case "email_change_current":
