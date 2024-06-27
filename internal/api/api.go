@@ -327,8 +327,8 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 	corsHandler := cors.New(cors.Options{
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete},
-		AllowedHeaders:   globalConfig.CORS.AllAllowedHeaders([]string{"Accept", "Authorization", "Content-Type", "X-Client-IP", "X-Client-Info", audHeaderName, useCookieHeader}),
-		ExposedHeaders:   []string{"X-Total-Count", "Link"},
+		AllowedHeaders:   globalConfig.CORS.AllAllowedHeaders([]string{"Accept", "Authorization", "Content-Type", "X-Client-IP", "X-Client-Info", audHeaderName, useCookieHeader, "X-Supabase-Api-Version"}),
+		ExposedHeaders:   []string{"X-Total-Count", "Link", "X-Supabase-Api-Version"},
 		AllowCredentials: true,
 	})
 
