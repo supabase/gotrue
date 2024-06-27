@@ -180,6 +180,40 @@ func assertAuthorizationSuccess(ts *ExternalTestSuite, u *url.URL, tokenCount in
 	}
 }
 
+func assertAuthorizationSuccessWithGenderAndBirthdateAndPhone(ts *ExternalTestSuite, u *url.URL, tokenCount int, userCount int, email string, name string, providerId string, avatar string, gender, birthdate, phone string) {
+	// ensure redirect has #access_token=...
+	v, err := url.ParseQuery(u.RawQuery)
+	ts.Require().NoError(err)
+	ts.Require().Empty(v.Get("error_description"))
+	ts.Require().Empty(v.Get("error"))
+
+	v, err = url.ParseQuery(u.Fragment)
+	ts.Require().NoError(err)
+	ts.NotEmpty(v.Get("access_token"))
+	ts.NotEmpty(v.Get("refresh_token"))
+	ts.NotEmpty(v.Get("expires_in"))
+	ts.Equal("bearer", v.Get("token_type"))
+
+	ts.Equal(1, tokenCount)
+	if userCount > -1 {
+		ts.Equal(1, userCount)
+	}
+
+	// ensure user has been created with metadata
+	user, err := models.FindUserByEmailAndAudience(ts.API.db, email, ts.Config.JWT.Aud)
+	ts.Require().NoError(err)
+	ts.Equal(providerId, user.UserMetaData["provider_id"])
+	ts.Equal(name, user.UserMetaData["full_name"])
+	if avatar == "" {
+		ts.Equal(nil, user.UserMetaData["avatar_url"])
+	} else {
+		ts.Equal(avatar, user.UserMetaData["avatar_url"])
+	}
+	ts.Equal(gender, user.UserMetaData["gender"])
+	ts.Equal(birthdate, user.UserMetaData["birthdate"])
+	ts.Equal(phone, user.UserMetaData["phone"])
+
+}
 func assertAuthorizationFailure(ts *ExternalTestSuite, u *url.URL, errorDescription string, errorType string, email string) {
 	// ensure new sign ups error
 	v, err := url.ParseQuery(u.RawQuery)
