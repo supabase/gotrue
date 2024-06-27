@@ -541,6 +541,28 @@ An end-to-end test includes:
 
 Since implementing an additional OAuth provider consists of making api calls to an external api, we set up a mock server to attempt to mock the responses expected from the OAuth provider.
 
+|Function/Provider|Apple|Azure|Bitbucket|Discord|Facebook|Figma|Fly|Github|Gitlab|Google|Kakao|Keycloak|Linkedin|Notion|Twitch|Twitter|WorkOS|Zoom
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+|TestSignupExternal*|O|O|O|O|O|O|O|O|O|O|O|O|O|O|O|O||O
+|TestSignupExternal*WithConnection|||||||||||||||||O|
+|TestSignupExternal*WithOrganization|||||||||||||||||O|
+|TestSignupExternal*WithProvider|||||||||||||||||O|
+|TestSignupExternal*WithoutURLSetup||||||||||||O||||||
+|TestSignupExternal*(_)AuthorizationCode||O|O|O|O|O|O|O|O|O|O|O|O|O|O||O|O
+|TestSignupExternal*_PKCE||||||O|O|O||||||||||
+|TestSignupExternal*DisableSignupErrorWhenNoUser||O|O|O|O|O|O|O|O|O|O|O|O|O|O||O|O
+|TestSignupExternal*DisableSignupErrorWhen(Empty\|No)Email||O|O|O|O|O|O|O|O|O|O|O||O|O||O|O
+|TestSignupExternal*DisableSignupSuccessWithPrimaryEmail||O|O|O|O|O|O|O|O|O|O|O|O|O|O||O|O
+|TestSignupExternal*DisableSignupSuccessWithSecondaryEmail|||O||||||O|||||||||
+|TestSignupExternal*DisableSignupSuccessWithNonPrimaryEmail||||||||O||||||||||
+|TestInviteTokenExternal*SuccessWhenMatchingToken||O|O|O|O|O||O|O|O|O|O|O|O|O||O|O
+|TestInviteTokenExternal*ErrorWhenNoMatchingToken||O|O|O|O|O||O|O|O|O|O|O|O|O||O|O
+|TestInviteTokenExternal*ErrorWhenWrongToken||O|O|O|O|O||O|O|O|O|O|O|O|O||O|O
+|TestInviteTokenExternal*ErrorWhenEmailDoesntMatch||O|O|O|O|O||O|O|O|O|O|O|O|O||O|O
+|TestSignupExternal*ErrorWhenUserBanned||||||O|O|O|||O|||||||
+|TestSignupExternal*ErrorWhenVerifiedFalse||||||||O|||O|||||||
+|TestSignupExternal*_MissingProfilePic|||||||||||||O|||||
+
 ## License
 
 By contributing to Auth, you agree that your contributions will be licensed
