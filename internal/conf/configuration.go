@@ -567,7 +567,7 @@ func (e *ExtensibilityPointConfiguration) ValidateExtensibilityPoint() error {
 		return validatePostgresPath(u)
 	case "http":
 		hostname := u.Hostname()
-		if hostname == "localhost" || hostname == "127.0.0.1" || hostname == "::1" || hostname == "host.docker.internal" {
+		if hostname == "localhost" || hostname == "127.0.0.1" || hostname == "::1" || hostname == "host.docker.internal" || hostname == "kong" || hostname == "edge_runtime" {
 			return validateHTTPHookSecrets(e.HTTPHookSecrets)
 		}
 		return fmt.Errorf("only localhost, 127.0.0.1, and ::1 are supported with http")

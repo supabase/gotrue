@@ -163,6 +163,8 @@ func TestValidateExtensibilityPointURI(t *testing.T) {
 		{desc: "Another Valid URI", uri: "pg-functions://postgres/user_management/add_user", expectError: false},
 		{desc: "Another Valid URI", uri: "pg-functions://postgres/MySpeCial/FUNCTION_THAT_YELLS_AT_YOU", expectError: false},
 		{desc: "Valid HTTP URI", uri: "http://localhost/functions/v1/custom-sms-sender", expectError: false},
+		{desc: "Valid localhost URI with kong alias", uri: "http://kong:8000/functions/v1/custom-sms-sender", expectError: false},
+		{desc: "Valid localhost URI with edge_runtime", uri: "http://edge_runtime:54321/functions/v1/custom-sms-sender", expectError: false},
 
 		// Negative test cases
 		{desc: "Invalid HTTP URI", uri: "http://asdfgggg.website.co/functions/v1/custom-sms-sender", expectError: true},
