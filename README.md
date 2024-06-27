@@ -618,15 +618,16 @@ Default Content (if template is unavailable):
 `MAILER_TEMPLATES_RECOVERY` - `string`
 
 URL path to an email template to use when resetting a password. (e.g. `https://www.example.com/path-to-email-template.html`)
-`SiteURL`, `Email`, and `ConfirmationURL` variables are available.
+`SiteURL`, `Email`, and `ConfirmationURL`, `Token` variables are available.
 
 Default Content (if template is unavailable):
 
 ```html
-<h2>Reset Password</h2>
+<h2>You have been invited</h2>
 
-<p>Follow this link to reset the password for your user:</p>
-<p><a href="{{ .ConfirmationURL }}">Reset Password</a></p>
+<p>You have been invited to create a user on {{ .SiteURL }}. Follow this link to accept the invite:</p>
+<p><a href="{{ .ConfirmationURL }}">Accept the invite</a></p>
+<p>Alternatively, enter the code: {{ .Token }}</p>
 ```
 
 `MAILER_TEMPLATES_MAGIC_LINK` - `string`
