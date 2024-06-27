@@ -397,6 +397,12 @@ func (u *User) Confirm(tx *storage.Connection) error {
 		return err
 	}
 
+	if err := u.UpdateUserMetaData(tx, map[string]interface{}{
+		"email_verified": true,
+	}); err != nil {
+		return err
+	}
+
 	if err := ClearAllOneTimeTokensForUser(tx, u.ID); err != nil {
 		return err
 	}
