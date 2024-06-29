@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/storage"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // User respresents a registered user with email/password authentication
@@ -69,6 +70,31 @@ type User struct {
 	IsAnonymous bool       `json:"is_anonymous" db:"is_anonymous"`
 
 	DONTUSEINSTANCEID uuid.UUID `json:"-" db:"instance_id"`
+}
+
+func NewUserWithPasswordHash(phone, email, passwordHash, aud string, userData map[string]interface{}) (*User, error) {
+	if strings.HasPrefix(passwordHash, crypto.Argon2Prefix) {
+		_, err := crypto.ParseArgon2Hash(passwordHash)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// verify that the hash is a bcrypt hash
+		_, err := bcrypt.Cost([]byte(passwordHash))
+		if err != nil {
+			return nil, err
+		}
+	}
+	id := uuid.Must(uuid.NewV4())
+	user := &User{
+		ID:                id,
+		Aud:               aud,
+		Email:             storage.NullString(strings.ToLower(email)),
+		Phone:             storage.NullString(phone),
+		UserMetaData:      userData,
+		EncryptedPassword: &passwordHash,
+	}
+	return user, nil
 }
 
 // NewUser initializes a new user from an email, password and user data.
@@ -351,7 +377,7 @@ func (u *User) UpdatePassword(tx *storage.Connection, sessionID *uuid.UUID) erro
 }
 
 // Authenticate a user from a password
-func (u *User) Authenticate(ctx context.Context, password string, decryptionKeys map[string]string, encrypt bool, encryptionKeyID string) (bool, bool, error) {
+func (u *User) Authenticate(ctx context.Context, tx *storage.Connection, password string, decryptionKeys map[string]string, encrypt bool, encryptionKeyID string) (bool, bool, error) {
 	if u.EncryptedPassword == nil {
 		return false, false, nil
 	}
@@ -369,6 +395,22 @@ func (u *User) Authenticate(ctx context.Context, password string, decryptionKeys
 	}
 
 	compareErr := crypto.CompareHashAndPassword(ctx, hash, password)
+
+	if !strings.HasPrefix(hash, crypto.Argon2Prefix) {
+		// check if cost exceeds default cost or is too low
+		cost, err := bcrypt.Cost([]byte(hash))
+		if err != nil {
+			return compareErr == nil, false, err
+		}
+
+		if cost > bcrypt.DefaultCost || cost == bcrypt.MinCost {
+			// don't bother with encrypting the password in Authenticate
+			// since it's handled separately
+			if err := u.SetPassword(ctx, password, false, "", ""); err != nil {
+				return compareErr == nil, false, err
+			}
+		}
+	}
 
 	return compareErr == nil, encrypt && (es == nil || es.ShouldReEncrypt(encryptionKeyID)), nil
 }

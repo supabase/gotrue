@@ -23,6 +23,7 @@ type AdminUserParams struct {
 	Email        string                 `json:"email"`
 	Phone        string                 `json:"phone"`
 	Password     *string                `json:"password"`
+	PasswordHash string                 `json:"password_hash"`
 	EmailConfirm bool                   `json:"email_confirm"`
 	PhoneConfirm bool                   `json:"phone_confirm"`
 	UserMetaData map[string]interface{} `json:"user_metadata"`
@@ -356,7 +357,11 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		providers = append(providers, "phone")
 	}
 
-	if params.Password == nil || *params.Password == "" {
+	if params.Password != nil && params.PasswordHash != "" {
+		return badRequestError(ErrorCodeValidationFailed, "Only a password or a password hash should be provided")
+	}
+
+	if (params.Password == nil || *params.Password == "") && params.PasswordHash == "" {
 		password, err := password.Generate(64, 10, 0, false, true)
 		if err != nil {
 			return internalServerError("Error generating password").WithInternalError(err)
@@ -364,7 +369,13 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		params.Password = &password
 	}
 
-	user, err := models.NewUser(params.Phone, params.Email, *params.Password, aud, params.UserMetaData)
+	var user *models.User
+	if params.PasswordHash != "" {
+		user, err = models.NewUserWithPasswordHash(params.Phone, params.Email, params.PasswordHash, aud, params.UserMetaData)
+	} else {
+		user, err = models.NewUser(params.Phone, params.Email, *params.Password, aud, params.UserMetaData)
+	}
+
 	if err != nil {
 		return internalServerError("Error creating user").WithInternalError(err)
 	}
@@ -459,7 +470,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	})
 
 	if err != nil {
-		if strings.Contains("invalid format for ban duration", err.Error()) {
+		if strings.Contains(err.Error(), "invalid format for ban duration") {
 			return err
 		}
 		return internalServerError("Database error creating new user").WithInternalError(err)

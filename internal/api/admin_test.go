@@ -244,6 +244,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				"isAuthenticated": true,
 				"provider":        "phone",
 				"providers":       []string{"phone"},
+				"password":        "test1",
 			},
 		},
 		{
@@ -259,6 +260,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				"isAuthenticated": true,
 				"provider":        "email",
 				"providers":       []string{"email", "phone"},
+				"password":        "test1",
 			},
 		},
 		{
@@ -288,6 +290,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				"isAuthenticated": false,
 				"provider":        "email",
 				"providers":       []string{"email"},
+				"password":        "",
 			},
 		},
 		{
@@ -304,6 +307,22 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				"isAuthenticated": true,
 				"provider":        "email",
 				"providers":       []string{"email"},
+				"password":        "test1",
+			},
+		},
+		{
+			desc: "With password hash",
+			params: map[string]interface{}{
+				"email":         "test5@example.com",
+				"password_hash": "$2y$10$SXEz2HeT8PUIGQXo9yeUIem8KzNxgG0d7o/.eGj2rj8KbRgAuRVlq",
+			},
+			expected: map[string]interface{}{
+				"email":           "test5@example.com",
+				"phone":           "",
+				"isAuthenticated": true,
+				"provider":        "email",
+				"providers":       []string{"email"},
+				"password":        "test",
 			},
 		},
 	}
@@ -346,11 +365,11 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 			}
 
 			var expectedPassword string
-			if _, ok := c.params["password"]; ok {
-				expectedPassword = fmt.Sprintf("%v", c.params["password"])
+			if _, ok := c.expected["password"]; ok {
+				expectedPassword = fmt.Sprintf("%v", c.expected["password"])
 			}
 
-			isAuthenticated, _, err := u.Authenticate(context.Background(), expectedPassword, ts.API.config.Security.DBEncryption.DecryptionKeys, ts.API.config.Security.DBEncryption.Encrypt, ts.API.config.Security.DBEncryption.EncryptionKeyID)
+			isAuthenticated, _, err := u.Authenticate(context.Background(), ts.API.db, expectedPassword, ts.API.config.Security.DBEncryption.DecryptionKeys, ts.API.config.Security.DBEncryption.Encrypt, ts.API.config.Security.DBEncryption.EncryptionKeyID)
 			require.NoError(ts.T(), err)
 
 			assert.Equal(ts.T(), c.expected["isAuthenticated"], isAuthenticated)
@@ -820,5 +839,49 @@ func (ts *AdminTestSuite) TestAdminUserUpdateFactor() {
 			require.Equal(ts.T(), c.ExpectedCode, w.Code)
 		})
 	}
+}
 
+func (ts *AdminTestSuite) TestAdminUserCreateValidationErrors() {
+	cases := []struct {
+		desc   string
+		params map[string]interface{}
+	}{
+		{
+			desc: "create user without email and phone",
+			params: map[string]interface{}{
+				"password": "test_password",
+			},
+		},
+		{
+			desc: "create user with password and password hash",
+			params: map[string]interface{}{
+				"email":         "test@example.com",
+				"password":      "test_password",
+				"password_hash": "$2y$10$Tk6yEdmTbb/eQ/haDMaCsuCsmtPVprjHMcij1RqiJdLGPDXnL3L1a",
+			},
+		},
+		{
+			desc: "invalid ban duration",
+			params: map[string]interface{}{
+				"email":        "test@example.com",
+				"ban_duration": "never",
+			},
+		},
+	}
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.params))
+			req := httptest.NewRequest(http.MethodPost, "/admin/users", &buffer)
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), http.StatusBadRequest, w.Code, w)
+
+			data := map[string]interface{}{}
+			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+			require.Equal(ts.T(), data["error_code"], ErrorCodeValidationFailed)
+		})
+
+	}
 }

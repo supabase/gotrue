@@ -310,7 +310,7 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 			u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
 
-			isAuthenticated, _, err := u.Authenticate(context.Background(), c.newPassword, ts.API.config.Security.DBEncryption.DecryptionKeys, ts.API.config.Security.DBEncryption.Encrypt, ts.API.config.Security.DBEncryption.EncryptionKeyID)
+			isAuthenticated, _, err := u.Authenticate(context.Background(), ts.API.db, c.newPassword, ts.API.config.Security.DBEncryption.DecryptionKeys, ts.API.config.Security.DBEncryption.Encrypt, ts.API.config.Security.DBEncryption.EncryptionKeyID)
 			require.NoError(ts.T(), err)
 
 			require.Equal(ts.T(), c.expected.isAuthenticated, isAuthenticated)
@@ -372,7 +372,7 @@ func (ts *UserTestSuite) TestUserUpdatePasswordNoReauthenticationRequired() {
 			u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
 
-			isAuthenticated, _, err := u.Authenticate(context.Background(), c.newPassword, ts.API.config.Security.DBEncryption.DecryptionKeys, ts.API.config.Security.DBEncryption.Encrypt, ts.API.config.Security.DBEncryption.EncryptionKeyID)
+			isAuthenticated, _, err := u.Authenticate(context.Background(), ts.API.db, c.newPassword, ts.API.config.Security.DBEncryption.DecryptionKeys, ts.API.config.Security.DBEncryption.Encrypt, ts.API.config.Security.DBEncryption.EncryptionKeyID)
 			require.NoError(ts.T(), err)
 
 			require.Equal(ts.T(), c.expected.isAuthenticated, isAuthenticated)
@@ -430,7 +430,7 @@ func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
-	isAuthenticated, _, err := u.Authenticate(context.Background(), "newpass", ts.Config.Security.DBEncryption.DecryptionKeys, ts.Config.Security.DBEncryption.Encrypt, ts.Config.Security.DBEncryption.EncryptionKeyID)
+	isAuthenticated, _, err := u.Authenticate(context.Background(), ts.API.db, "newpass", ts.Config.Security.DBEncryption.DecryptionKeys, ts.Config.Security.DBEncryption.Encrypt, ts.Config.Security.DBEncryption.EncryptionKeyID)
 	require.NoError(ts.T(), err)
 
 	require.True(ts.T(), isAuthenticated)

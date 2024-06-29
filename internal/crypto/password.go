@@ -32,6 +32,8 @@ const (
 
 	// BCrypt hashed passwords have a 72 character limit
 	MaxPasswordLength = 72
+
+	Argon2Prefix = "$argon2"
 )
 
 // PasswordHashCost is the current pasword hashing cost
@@ -54,11 +56,23 @@ var ErrArgon2MismatchedHashAndPassword = errors.New("crypto: argon2 hash and pas
 // argon2HashRegexp https://github.com/P-H-C/phc-string-format/blob/master/phc-sf-spec.md#argon2-encoding
 var argon2HashRegexp = regexp.MustCompile("^[$](?P<alg>argon2(d|i|id))[$]v=(?P<v>(16|19))[$]m=(?P<m>[0-9]+),t=(?P<t>[0-9]+),p=(?P<p>[0-9]+)(,keyid=(?P<keyid>[^,]+))?(,data=(?P<data>[^$]+))?[$](?P<salt>[^$]+)[$](?P<hash>.+)$")
 
-func compareHashAndPasswordArgon2(ctx context.Context, hash, password string) error {
+type Argon2HashInput struct {
+	alg     string
+	v       string
+	memory  uint64
+	time    uint64
+	threads uint64
+	keyid   string
+	data    string
+	salt    []byte
+	rawHash []byte
+}
+
+func ParseArgon2Hash(hash string) (*Argon2HashInput, error) {
 	submatch := argon2HashRegexp.FindStringSubmatchIndex(hash)
 
 	if submatch == nil {
-		return errors.New("crypto: incorrect argon2 hash format")
+		return nil, errors.New("crypto: incorrect argon2 hash format")
 	}
 
 	alg := string(argon2HashRegexp.ExpandString(nil, "$alg", hash, submatch))
@@ -72,58 +86,68 @@ func compareHashAndPasswordArgon2(ctx context.Context, hash, password string) er
 	hashB64 := string(argon2HashRegexp.ExpandString(nil, "$hash", hash, submatch))
 
 	if alg != "argon2i" && alg != "argon2id" {
-		return fmt.Errorf("crypto: argon2 hash uses unsupported algorithm %q only argon2i and argon2id supported", alg)
+		return nil, fmt.Errorf("crypto: argon2 hash uses unsupported algorithm %q only argon2i and argon2id supported", alg)
 	}
 
 	if v != "19" {
-		return fmt.Errorf("crypto: argon2 hash uses unsupported version %q only %d is supported", v, argon2.Version)
+		return nil, fmt.Errorf("crypto: argon2 hash uses unsupported version %q only %d is supported", v, argon2.Version)
 	}
 
 	if data != "" {
-		return fmt.Errorf("crypto: argon2 hashes with the data parameter not supported")
+		return nil, fmt.Errorf("crypto: argon2 hashes with the data parameter not supported")
 	}
 
 	if keyid != "" {
-		return fmt.Errorf("crypto: argon2 hashes with the keyid parameter not supported")
+		return nil, fmt.Errorf("crypto: argon2 hashes with the keyid parameter not supported")
 	}
 
 	memory, err := strconv.ParseUint(m, 10, 32)
 	if err != nil {
-		return fmt.Errorf("crypto: argon2 hash has invalid m parameter %q %w", m, err)
+		return nil, fmt.Errorf("crypto: argon2 hash has invalid m parameter %q %w", m, err)
 	}
 
 	time, err := strconv.ParseUint(t, 10, 32)
 	if err != nil {
-		return fmt.Errorf("crypto: argon2 hash has invalid t parameter %q %w", t, err)
+		return nil, fmt.Errorf("crypto: argon2 hash has invalid t parameter %q %w", t, err)
 	}
 
 	threads, err := strconv.ParseUint(p, 10, 8)
 	if err != nil {
-		return fmt.Errorf("crypto: argon2 hash has invalid p parameter %q %w", p, err)
+		return nil, fmt.Errorf("crypto: argon2 hash has invalid p parameter %q %w", p, err)
 	}
 
 	rawHash, err := base64.RawStdEncoding.DecodeString(hashB64)
 	if err != nil {
-		return fmt.Errorf("crypto: argon2 hash has invalid base64 in the hash section %w", err)
+		return nil, fmt.Errorf("crypto: argon2 hash has invalid base64 in the hash section %w", err)
 	}
 
 	salt, err := base64.RawStdEncoding.DecodeString(saltB64)
 	if err != nil {
-		return fmt.Errorf("crypto: argon2 hash has invalid base64 in the salt section %w", err)
+		return nil, fmt.Errorf("crypto: argon2 hash has invalid base64 in the salt section %w", err)
+	}
+
+	input := Argon2HashInput{alg, v, memory, time, threads, keyid, data, salt, rawHash}
+
+	return &input, nil
+}
+
+func compareHashAndPasswordArgon2(ctx context.Context, hash, password string) error {
+	input, err := ParseArgon2Hash(hash)
+	if err != nil {
+		return err
+	}
+
+	attributes := []attribute.KeyValue{
+		attribute.String("alg", input.alg),
+		attribute.String("v", input.v),
+		attribute.Int64("m", int64(input.memory)),
+		attribute.Int64("t", int64(input.time)),
+		attribute.Int("p", int(input.threads)),
+		attribute.Int("len", len(input.rawHash)),
 	}
 
 	var match bool
 	var derivedKey []byte
-
-	attributes := []attribute.KeyValue{
-		attribute.String("alg", alg),
-		attribute.String("v", v),
-		attribute.Int64("m", int64(memory)),
-		attribute.Int64("t", int64(time)),
-		attribute.Int("p", int(threads)),
-		attribute.Int("len", len(rawHash)),
-	}
-
 	compareHashAndPasswordSubmittedCounter.Add(ctx, 1, metric.WithAttributes(attributes...))
 	defer func() {
 		attributes = append(attributes, attribute.Bool(
@@ -134,15 +158,15 @@ func compareHashAndPasswordArgon2(ctx context.Context, hash, password string) er
 		compareHashAndPasswordCompletedCounter.Add(ctx, 1, metric.WithAttributes(attributes...))
 	}()
 
-	switch alg {
+	switch input.alg {
 	case "argon2i":
-		derivedKey = argon2.Key([]byte(password), salt, uint32(time), uint32(memory)*1024, uint8(threads), uint32(len(rawHash)))
+		derivedKey = argon2.Key([]byte(password), input.salt, uint32(input.time), uint32(input.memory)*1024, uint8(input.threads), uint32(len(input.rawHash)))
 
 	case "argon2id":
-		derivedKey = argon2.IDKey([]byte(password), salt, uint32(time), uint32(memory)*1024, uint8(threads), uint32(len(rawHash)))
+		derivedKey = argon2.IDKey([]byte(password), input.salt, uint32(input.time), uint32(input.memory)*1024, uint8(input.threads), uint32(len(input.rawHash)))
 	}
 
-	match = subtle.ConstantTimeCompare(derivedKey, rawHash) == 0
+	match = subtle.ConstantTimeCompare(derivedKey, input.rawHash) == 0
 
 	if !match {
 		return ErrArgon2MismatchedHashAndPassword
@@ -155,7 +179,7 @@ func compareHashAndPasswordArgon2(ctx context.Context, hash, password string) er
 // password, returns nil if equal otherwise an error. Context can be used to
 // cancel the hashing if the algorithm supports it.
 func CompareHashAndPassword(ctx context.Context, hash, password string) error {
-	if strings.HasPrefix(hash, "$argon2") {
+	if strings.HasPrefix(hash, Argon2Prefix) {
 		return compareHashAndPasswordArgon2(ctx, hash, password)
 	}
 
@@ -181,7 +205,6 @@ func CompareHashAndPassword(ctx context.Context, hash, password string) error {
 	}()
 
 	err = bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
-
 	return err
 }
 

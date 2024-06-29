@@ -1,6 +1,7 @@
 package models
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/storage/test"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const modelsTestConfig = "../../hack/test.env"
@@ -377,4 +379,94 @@ func (ts *UserTestSuite) TestSetPasswordTooLong() {
 
 	err = user.SetPassword(ts.db.Context(), strings.Repeat("a", crypto.MaxPasswordLength), false, "", "")
 	require.NoError(ts.T(), err)
+}
+
+func (ts *UserTestSuite) TestNewUserWithPasswordHashSuccess() {
+	cases := []struct {
+		desc string
+		hash string
+	}{
+		{
+			desc: "Valid bcrypt hash",
+			hash: "$2y$10$SXEz2HeT8PUIGQXo9yeUIem8KzNxgG0d7o/.eGj2rj8KbRgAuRVlq",
+		},
+		{
+			desc: "Valid argon2i hash",
+			hash: "$argon2i$v=19$m=16,t=2,p=1$bGJRWThNOHJJTVBSdHl2dQ$NfEnUOuUpb7F2fQkgFUG4g",
+		},
+		{
+			desc: "Valid argon2id hash",
+			hash: "$argon2id$v=19$m=32,t=3,p=2$SFVpOWJ0eXhjRzVkdGN1RQ$RXnb8rh7LaDcn07xsssqqulZYXOM/EUCEFMVcAcyYVk",
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			u, err := NewUserWithPasswordHash("", "", c.hash, "", nil)
+			require.NoError(ts.T(), err)
+			require.NotNil(ts.T(), u)
+		})
+	}
+}
+
+func (ts *UserTestSuite) TestNewUserWithPasswordHashFailure() {
+	cases := []struct {
+		desc string
+		hash string
+	}{
+		{
+			desc: "Invalid argon2i hash",
+			hash: "$argon2id$test",
+		},
+		{
+			desc: "Invalid bcrypt hash",
+			hash: "plaintest_password",
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			u, err := NewUserWithPasswordHash("", "", c.hash, "", nil)
+			require.Error(ts.T(), err)
+			require.Nil(ts.T(), u)
+		})
+	}
+}
+
+func (ts *UserTestSuite) TestAuthenticate() {
+	// every case uses "test" as the password
+	cases := []struct {
+		desc             string
+		hash             string
+		expectedHashCost int
+	}{
+		{
+			desc:             "Invalid bcrypt hash cost of 11",
+			hash:             "$2y$11$4lH57PU7bGATpRcx93vIoObH3qDmft/pytbOzDG9/1WsyNmN5u4di",
+			expectedHashCost: bcrypt.MinCost,
+		},
+		{
+			desc:             "Valid bcrypt hash cost of 10",
+			hash:             "$2y$10$va66S4MxFrH6G6L7BzYl0.QgcYgvSr/F92gc.3botlz7bG4p/g/1i",
+			expectedHashCost: bcrypt.DefaultCost,
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			u, err := NewUserWithPasswordHash("", "", c.hash, "", nil)
+			require.NoError(ts.T(), err)
+			require.NoError(ts.T(), ts.db.Create(u))
+			require.NotNil(ts.T(), u)
+
+			isAuthenticated, _, err := u.Authenticate(context.Background(), ts.db, "test", nil, false, "")
+			require.NoError(ts.T(), err)
+			require.True(ts.T(), isAuthenticated)
+
+			// check hash cost
+			hashCost, err := bcrypt.Cost([]byte(*u.EncryptedPassword))
+			require.NoError(ts.T(), err)
+			require.Equal(ts.T(), c.expectedHashCost, hashCost)
+		})
+	}
 }
