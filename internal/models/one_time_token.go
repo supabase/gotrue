@@ -250,7 +250,7 @@ func FindUserByEmailChangeNewAndAudience(tx *storage.Connection, email, token, a
 
 	if ott == nil {
 		ott, err = FindOneTimeToken(tx, "pkce_"+token, EmailChangeTokenNew)
-		if err != nil && !IsNotFoundError(err) {
+		if err != nil {
 			return nil, err
 		}
 	}
